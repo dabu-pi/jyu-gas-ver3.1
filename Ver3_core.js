@@ -205,13 +205,75 @@ function onEdit(e) {
   }
 }
 
-/** ===== 1行目ヘッダー名→列番号 ===== */
+/** ===== ヘッダー名正規化（trim＋全角空白→半角＋連続空白圧縮＋英字小文字） ===== */
+function normalizeHeaderName_(s) {
+  return String(s || "")
+    .trim()
+    .replace(/\u3000/g, " ")   // 全角空白→半角
+    .replace(/\s+/g, " ")      // 連続空白→1つ
+    .toLowerCase();
+}
+
+/** ===== 別名辞書（正式名 → 別名リスト） ===== */
+const HEADER_ALIASES_ = {
+  "患者ID":    ["患者ＩＤ", "patientId", "PATIENT_ID", "patient_id"],
+  "施術日":    ["施術日付", "treatDate", "treatmentDate", "treatment_date"],
+  "visitKey":  ["訪問キー", "来院キー", "キー", "visitkey"],
+  "区分":      ["kubun", "種別"],
+  "受傷日_確定": ["受傷日", "負傷日", "injuryDate", "injury_date"],
+  "受傷日_部位1": ["受傷日1"],
+  "受傷日_部位2": ["受傷日2"],
+  "傷病_部位1": ["傷病1", "傷病名_部位1"],
+  "傷病_部位2": ["傷病2", "傷病名_部位2"],
+  "部位_部位1": ["部位1", "患部_部位1", "site1"],
+  "部位_部位2": ["部位2", "患部_部位2", "site2"],
+  "caseNo":    ["caseno", "ケース番号"],
+  "caseKey":   ["casekey", "ケースキー"],
+};
+
+/**
+ * 別名→正式名の逆引きマップを構築（正規化済みキーで引く）
+ * 初回呼び出し時にキャッシュ
+ */
+var _aliasToCanonical_ = null;
+function getAliasToCanonicalMap_() {
+  if (_aliasToCanonical_) return _aliasToCanonical_;
+  _aliasToCanonical_ = {};
+  for (var canonical in HEADER_ALIASES_) {
+    var aliases = HEADER_ALIASES_[canonical];
+    for (var j = 0; j < aliases.length; j++) {
+      _aliasToCanonical_[normalizeHeaderName_(aliases[j])] = canonical;
+    }
+  }
+  return _aliasToCanonical_;
+}
+
+/** ===== 1行目ヘッダー名→列番号（1-based）＋正規化＋別名吸収 ===== */
 function buildHeaderColMap_(sh) {
   const lastCol = sh.getLastColumn();
   if (lastCol < 1) return {};
-  const headers = sh.getRange(1, 1, 1, lastCol).getValues()[0].map(v => String(v || "").trim());
+  const headers = sh.getRange(1, 1, 1, lastCol).getValues()[0];
+  const aliasMap = getAliasToCanonicalMap_();
   const map = {};
-  headers.forEach((h, i) => { if (h) map[h] = i + 1; });
+
+  headers.forEach((raw, i) => {
+    const trimmed = String(raw || "").trim();
+    if (!trimmed) return;
+
+    const col1 = i + 1;
+
+    // 正式名（トリム済み）を最優先で登録
+    if (!map[trimmed]) map[trimmed] = col1;
+
+    // 正規化した実値でも引けるように（正式名と異なる場合のみ）
+    var norm = normalizeHeaderName_(trimmed);
+    if (norm !== trimmed && !map[norm]) map[norm] = col1;
+
+    // 別名辞書で正式名に解決し、その正式名でも引けるようにする
+    var canonical = aliasMap[norm];
+    if (canonical && !map[canonical]) map[canonical] = col1;
+  });
+
   return map;
 }
 
@@ -243,10 +305,20 @@ function minDate_(d1, d2) {
   return (a.getTime() <= b.getTime()) ? a : b;
 }
 
-/** ===== 必須列チェック ===== */
-function ensureRequiredCols_(map, requiredList) {
+/** ===== 必須列チェック（シート名・実ヘッダー付きエラー） ===== */
+function ensureRequiredCols_(map, requiredList, sheetName) {
   const missing = requiredList.filter(n => !map[n]);
-  if (missing.length) throw new Error("ヘッダー不足：\n- " + missing.join("\n- "));
+  if (!missing.length) return;
+
+  var actualHeaders = Object.keys(map).slice(0, 30);
+  var label = sheetName ? ("【" + sheetName + "】") : "【対象シート】";
+
+  throw new Error(
+    label + " ヘッダー不足：\n" +
+    "- " + missing.join("\n- ") + "\n\n" +
+    label + " 実ヘッダー（先頭30件）：\n" +
+    actualHeaders.join(", ")
+  );
 }
 
 /** ===== キー列で行検索 ===== */
@@ -359,7 +431,7 @@ function saveVisitToCases_V3() {
   const now = new Date();
 
   const caseMap = buildHeaderColMap_(caseSh);
-  ensureRequiredCols_(caseMap, Object.values(CASE_COLS));
+  ensureRequiredCols_(caseMap, Object.values(CASE_COLS), SHEETS.cases);
 
   // case単位でエピソードと区分を計算（★B完成版：終了境界で切る）
   const ep1 = calcEpisodeForCase_(caseSh, caseMap, patientId, treatDate, 1);
@@ -512,7 +584,7 @@ function refreshKeikaHistoryUI_V3() {
   }
 
   const caseMap = buildHeaderColMap_(caseSh);
-  ensureRequiredCols_(caseMap, [CASE_COLS.patientId, CASE_COLS.caseNo, CASE_COLS.treatDate, CASE_COLS.keikaNow]);
+  ensureRequiredCols_(caseMap, [CASE_COLS.patientId, CASE_COLS.caseNo, CASE_COLS.treatDate, CASE_COLS.keikaNow], SHEETS.cases);
 
   const hist1 = buildKeikaHistoryTextFromCases_(caseSh, caseMap, patientId, 1, 5);
   const hist2 = buildKeikaHistoryTextFromCases_(caseSh, caseMap, patientId, 2, 5);
@@ -575,7 +647,7 @@ function autofillFromPreviousVisit_V3() {
     CASE_COLS.start1, CASE_COLS.end1,
     CASE_COLS.start2, CASE_COLS.end2,
     CASE_COLS.shoken
-  ]);
+  ], SHEETS.cases);
 
   const ep1 = calcEpisodeForCase_(caseSh, caseMap, patientId, treatDate, 1);
   const ep2 = calcEpisodeForCase_(caseSh, caseMap, patientId, treatDate, 2);
@@ -799,8 +871,8 @@ function exportHeaderFromCases_V3() {
   const caseMap = buildHeaderColMap_(caseSh);
   const headMap = buildHeaderColMap_(headSh);
 
-  ensureRequiredCols_(caseMap, [CASE_COLS.visitKey, CASE_COLS.treatDate, CASE_COLS.patientId, CASE_COLS.kubun, CASE_COLS.injuryFixed, CASE_COLS.caseKey, CASE_COLS.caseNo]);
-  ensureRequiredCols_(headMap, Object.values(HEADER_COLS));
+  ensureRequiredCols_(caseMap, [CASE_COLS.visitKey, CASE_COLS.treatDate, CASE_COLS.patientId, CASE_COLS.kubun, CASE_COLS.injuryFixed, CASE_COLS.caseKey, CASE_COLS.caseNo], SHEETS.cases);
+  ensureRequiredCols_(headMap, Object.values(HEADER_COLS), SHEETS.header);
 
   const lastRow = caseSh.getLastRow();
   if (lastRow < 2) {
@@ -1035,10 +1107,17 @@ function checkHeaders_V3() {
   const missCase = needCase.filter(h => !caseMap[h]);
   const missHead = needHead.filter(h => !headMap[h]);
 
+  var caseActual = Object.keys(caseMap).slice(0, 30).join(", ");
+  var headActual = Object.keys(headMap).slice(0, 30).join(", ");
+
   SpreadsheetApp.getUi().alert(
     "ヘッダーチェック結果\n\n" +
-    (missCase.length ? "【来院ケース 不足】\n- " + missCase.join("\n- ") + "\n\n" : "【来院ケース 不足】なし\n\n") +
-    (missHead.length ? "【来院ヘッダ 不足】\n- " + missHead.join("\n- ") : "【来院ヘッダ 不足】なし")
+    (missCase.length
+      ? "【来院ケース 不足】\n- " + missCase.join("\n- ") + "\n\n実ヘッダー：" + caseActual + "\n\n"
+      : "【来院ケース 不足】なし\n\n") +
+    (missHead.length
+      ? "【来院ヘッダ 不足】\n- " + missHead.join("\n- ") + "\n\n実ヘッダー：" + headActual
+      : "【来院ヘッダ 不足】なし")
   );
 }
 
