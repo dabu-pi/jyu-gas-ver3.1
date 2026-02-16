@@ -1,11 +1,26 @@
 /****************************************************
- * 柔整 Ver3 金額フェーズ（最終ヘッダー前提・衝突ゼロ版）
- * - core側の SHEETS / HEADER_COLS / MASTER_COLS / buildHeaderColMap_ 等を利用する
- * - このファイルでは「新規関数」と「AM_定数」だけを持つ（重複宣言しない）
+ * 柔整 Ver3.1 金額フェーズ（統合版対応）
  *
- * ★最終方針
- * - 施術明細の金額は “_確定” 列のみを正とする
- * - 旧列（施療/後療料, 冷罨法, 温罨法, 電療, 明細小計 等）は参照/更新しない
+ * ★役割
+ * (A) 共有ユーティリティ関数（core側からも呼ばれる）
+ *     - loadSettings_V3_      … 設定シート読み込み
+ *     - loadBurdenRatio_V3_   … 患者マスタから負担割合取得
+ *     - calcBaseFee_V3_       … 区分×傷病種別→基本料
+ *     - detectInjuryType_V3_  … 傷病名→打撲/捻挫/挫傷
+ *     - roundToUnit_V3_       … 端数処理（四捨五入）
+ *     - asDate_V3_ / diffDays_V3_ / pickInjuryDate_V3_
+ *
+ * (B) 施術明細シートベースの手動再計算
+ *     - menuRecalcAmounts_V3  … メニュー実行
+ *     - recalcAmountsByVisitKey_V3_ … 実処理
+ *
+ * ★注意
+ * - core側の SHEETS / HEADER_COLS / MASTER_COLS / CASE_COLS /
+ *   buildHeaderColMap_ / ensureRequiredCols_ 等を利用する
+ * - このファイルでは重複宣言しない
+ *
+ * ★visitKey形式（統合版）
+ * - 患者ID_yyyy-MM-dd（旧"|"から"_"に変更済み）
  ****************************************************/
 
 /** ===== 設定キー（設定シートA列）===== */
@@ -33,11 +48,11 @@ const AM_DETAIL_COLS = {
   visitKey: "visitKey",
   patientId: "患者ID",
   treatDate: "施術日",
-  kubun: "区分", // 初検/再検/後療
+  kubun: "区分",
   injuryDateFixed: "受傷日_確定",
   injuryDateInput: "受傷日(入力)",
   byomei: "傷病",
-  partOrder: "部位順位", // 1,2,3...
+  partOrder: "部位順位",
   coldChk: "冷",
   warmChk: "温",
   electroChk: "電",
@@ -53,155 +68,21 @@ const AM_DETAIL_COLS = {
   rowTotalOut: "行合計_確定",
 };
 
-/** メニュー実行（visitKeyを入力） */
-function menuRecalcAmounts_V3() {
-  const ss = SpreadsheetApp.getActive();
-  const ui = SpreadsheetApp.getUi();
 
-  const res = ui.prompt("金額再計算", "visitKey を入力してください（例：P0001|2026-02-15）", ui.ButtonSet.OK_CANCEL);
-  if (res.getSelectedButton() !== ui.Button.OK) return;
-
-  const visitKey = (res.getResponseText() || "").trim();
-  if (!visitKey) {
-    ui.alert("visitKey が空です。");
-    return;
-  }
-
-  const result = recalcAmountsByVisitKey_V3_(ss, visitKey);
-  ui.alert(
-    `完了：${visitKey}\n` +
-    `明細行更新：${result.updatedRows}\n` +
-    `来院合計：${result.total}\n` +
-    `窓口負担：${result.copay}\n` +
-    `保険請求：${result.claim}`
-  );
-}
-
-/** visitKey単位で、明細→ヘッダを再計算 */
-function recalcAmountsByVisitKey_V3_(ss, visitKey) {
-  const settings = loadSettings_V3_(ss);
-
-  const detailSh = ss.getSheetByName(SHEETS.detail);
-  const headerSh = ss.getSheetByName(SHEETS.header);
-  const masterSh = ss.getSheetByName(SHEETS.master);
-
-  const maps = {
-    detail: buildHeaderColMap_(detailSh),
-    header: buildHeaderColMap_(headerSh),
-    master: buildHeaderColMap_(masterSh),
-  };
-
-  // 必須列チェック（不足なら即エラー＝事故ゼロ）
-  ensureRequiredCols_(maps.detail, Object.values(AM_DETAIL_COLS));
-  ensureRequiredCols_(maps.header, [
-    HEADER_COLS.visitKey,
-    HEADER_COLS.visitTotal,
-    HEADER_COLS.windowPay,
-    HEADER_COLS.claimPay,
-  ]);
-  ensureRequiredCols_(maps.master, [MASTER_COLS.patientId, MASTER_COLS.burden]);
-
-  // 明細全取得
-  const detailValues = detailSh.getDataRange().getValues();
-  if (detailValues.length < 2) throw new Error("施術明細にデータがありません。");
-
-  // visitKey該当行を収集（0-based index）
-  const vkCol0 = maps.detail[AM_DETAIL_COLS.visitKey] - 1;
-  const rows0 = [];
-  for (let r0 = 1; r0 < detailValues.length; r0++) {
-    if (String(detailValues[r0][vkCol0] || "").trim() === visitKey) rows0.push(r0);
-  }
-  if (!rows0.length) throw new Error(`施術明細で visitKey=${visitKey} が見つかりません。`);
-
-  // 患者ID
-  const pidCol0 = maps.detail[AM_DETAIL_COLS.patientId] - 1;
-  const patientId = String(detailValues[rows0[0]][pidCol0] || "").trim();
-  if (!patientId) throw new Error("施術明細の患者IDが空です。");
-
-  // 負担割合
-  const burden = loadBurdenRatio_V3_(masterSh, maps.master, patientId);
-
-  let total = 0;
-
-  // 明細：あなたの設計優先（1行ずつ setValue）
-  for (const r0 of rows0) {
-    const row = detailValues[r0];
-
-    const kubun = String(row[maps.detail[AM_DETAIL_COLS.kubun] - 1] || "").trim();
-    const byomei = String(row[maps.detail[AM_DETAIL_COLS.byomei] - 1] || "").trim();
-
-    const treatDate = asDate_V3_(row[maps.detail[AM_DETAIL_COLS.treatDate] - 1]);
-    const injuryDate = pickInjuryDate_V3_(row, maps.detail);
-
-    const partOrder = Number(row[maps.detail[AM_DETAIL_COLS.partOrder] - 1] || 0) || 0;
-    const coef = (partOrder >= 3) ? Number(settings.multiCoef3 || 0.6) : 1.0;
-
-    const coldChk = row[maps.detail[AM_DETAIL_COLS.coldChk] - 1] === true;
-    const warmChk = row[maps.detail[AM_DETAIL_COLS.warmChk] - 1] === true;
-    const electroChk = row[maps.detail[AM_DETAIL_COLS.electroChk] - 1] === true;
-
-    const injuryType = detectInjuryType_V3_(byomei);
-    const base = calcBaseFee_V3_(settings, kubun, injuryType);
-
-    // 相談支援：運用ON列が無いので事故防止で0固定（必要なら後でON列追加）
-    const support = 0;
-
-    const dayDiff = diffDays_V3_(injuryDate, treatDate);
-
-    // ★あなたのルール（厚労省運用）
-    const cold = (coldChk && kubun === "初検" && dayDiff != null && dayDiff <= 1) ? settings.cold : 0;
-    const warm = (warmChk && (kubun === "再検" || kubun === "後療") && dayDiff != null && dayDiff >= 5) ? settings.warm : 0;
-    const electro = (electroChk && (kubun === "再検" || kubun === "後療") && dayDiff != null && dayDiff >= 5) ? settings.electro : 0;
-    const taiki = ((warm > 0 || electro > 0) && (kubun === "再検" || kubun === "後療") && dayDiff != null && dayDiff >= 5) ? settings.taiki : 0;
-
-    const rowTotal = (base + support + cold + warm + electro + taiki) * coef;
-    total += rowTotal;
-
-    // 書き込み（1-based行/列）
-    const row1 = r0 + 1;
-    detailSh.getRange(row1, maps.detail[AM_DETAIL_COLS.coefOut]).setValue(coef);
-    detailSh.getRange(row1, maps.detail[AM_DETAIL_COLS.baseOut]).setValue(base);
-    detailSh.getRange(row1, maps.detail[AM_DETAIL_COLS.supportOut]).setValue(support);
-    detailSh.getRange(row1, maps.detail[AM_DETAIL_COLS.coldOut]).setValue(cold);
-    detailSh.getRange(row1, maps.detail[AM_DETAIL_COLS.warmOut]).setValue(warm);
-    detailSh.getRange(row1, maps.detail[AM_DETAIL_COLS.electroOut]).setValue(electro);
-    detailSh.getRange(row1, maps.detail[AM_DETAIL_COLS.taikiOut]).setValue(taiki);
-    detailSh.getRange(row1, maps.detail[AM_DETAIL_COLS.rowTotalOut]).setValue(rowTotal);
-  }
-
-  // 窓口・請求
-  const unit = settings.roundUnit || 1;
-  const copayRaw = total * burden;
-  const copay = roundToUnit_V3_(copayRaw, unit);
-  const claim = total - copay;
-
-  // ヘッダ行を探して更新
-  const headerValues = headerSh.getDataRange().getValues();
-  const hkCol0 = maps.header[HEADER_COLS.visitKey] - 1;
-  let headerRow0 = -1;
-  for (let r0 = 1; r0 < headerValues.length; r0++) {
-    if (String(headerValues[r0][hkCol0] || "").trim() === visitKey) { headerRow0 = r0; break; }
-  }
-  if (headerRow0 === -1) throw new Error(`来院ヘッダで visitKey=${visitKey} が見つかりません。`);
-
-  const hr1 = headerRow0 + 1;
-  headerSh.getRange(hr1, maps.header[HEADER_COLS.visitTotal]).setValue(total);
-  headerSh.getRange(hr1, maps.header[HEADER_COLS.windowPay]).setValue(copay);
-  headerSh.getRange(hr1, maps.header[HEADER_COLS.claimPay]).setValue(claim);
-
-  return { updatedRows: rows0.length, total, copay, claim };
-}
+/* =======================================================================
+   (A) 共有ユーティリティ関数
+   ======================================================================= */
 
 /** 設定読み込み（A:キー B:値） */
 function loadSettings_V3_(ss) {
-  const sh = ss.getSheetByName(SHEETS.settings);
-  const values = sh.getDataRange().getValues();
-  const map = {};
+  var sh = ss.getSheetByName(SHEETS.settings);
+  var values = sh.getDataRange().getValues();
+  var map = {};
 
-  for (let r = 1; r < values.length; r++) {
-    const key = String(values[r][0] || "").trim();
+  for (var r = 1; r < values.length; r++) {
+    var key = String(values[r][0] || "").trim();
     if (!key) continue;
-    const val = values[r][1];
+    var val = values[r][1];
     map[key] = (typeof val === "number") ? val : Number(String(val || "").trim() || 0);
   }
 
@@ -226,21 +107,21 @@ function loadSettings_V3_(ss) {
 
 /** 患者マスタから負担割合取得（0.3 or 30 どちらでもOK） */
 function loadBurdenRatio_V3_(masterSh, masterMap, patientId) {
-  const values = masterSh.getDataRange().getValues();
-  const pidCol0 = masterMap[MASTER_COLS.patientId] - 1;
-  const bCol0 = masterMap[MASTER_COLS.burden] - 1;
+  var values = masterSh.getDataRange().getValues();
+  var pidCol0 = masterMap[MASTER_COLS.patientId] - 1;
+  var bCol0 = masterMap[MASTER_COLS.burden] - 1;
 
-  for (let r0 = 1; r0 < values.length; r0++) {
+  for (var r0 = 1; r0 < values.length; r0++) {
     if (String(values[r0][pidCol0] || "").trim() !== patientId) continue;
-    const raw = values[r0][bCol0];
-    const num = (typeof raw === "number") ? raw : Number(String(raw || "").trim());
+    var raw = values[r0][bCol0];
+    var num = (typeof raw === "number") ? raw : Number(String(raw || "").trim());
     if (!isFinite(num)) return 0;
     return (num > 1) ? (num / 100) : num;
   }
-  throw new Error(`患者マスタに患者ID=${patientId}が見つかりません。`);
+  throw new Error("患者マスタに患者ID=" + patientId + "が見つかりません。");
 }
 
-/** 基本料（あなたの設定シート通り） */
+/** 基本料（設定シート通り） */
 function calcBaseFee_V3_(settings, kubun, injuryType) {
   if (kubun === "初検") {
     if (injuryType === "打撲") return settings.shoryoDaboku;
@@ -257,6 +138,7 @@ function calcBaseFee_V3_(settings, kubun, injuryType) {
   return 0;
 }
 
+/** 傷病名→打撲/捻挫/挫傷 判別 */
 function detectInjuryType_V3_(byomei) {
   if (!byomei) return null;
   if (byomei.indexOf("打撲") !== -1) return "打撲";
@@ -265,42 +147,201 @@ function detectInjuryType_V3_(byomei) {
   return null;
 }
 
-function pickInjuryDate_V3_(row, detailMap) {
-  const cFixed = detailMap[AM_DETAIL_COLS.injuryDateFixed];
-  if (cFixed) {
-    const d = asDate_V3_(row[cFixed - 1]);
-    if (d) return d;
-  }
-  const cIn = detailMap[AM_DETAIL_COLS.injuryDateInput];
-  if (cIn) {
-    const d = asDate_V3_(row[cIn - 1]);
-    if (d) return d;
-  }
-  return null;
+/** 端数処理（四捨五入） */
+function roundToUnit_V3_(value, unit) {
+  var u = Number(unit || 1);
+  if (!isFinite(value)) return 0;
+  if (!isFinite(u) || u <= 0) return Math.round(value);
+  return Math.round(value / u) * u;
 }
 
-function diffDays_V3_(injury, treat) {
-  if (!(injury instanceof Date) || !(treat instanceof Date)) return null;
-  const a = new Date(injury.getFullYear(), injury.getMonth(), injury.getDate());
-  const b = new Date(treat.getFullYear(), treat.getMonth(), treat.getDate());
-  return Math.round((b.getTime() - a.getTime()) / (24 * 3600 * 1000));
-}
-
+/** Date変換（Date/文字列→Date or null） */
 function asDate_V3_(v) {
   if (v instanceof Date && !isNaN(v.getTime())) return v;
   if (typeof v === "string") {
-    const s = v.trim();
+    var s = v.trim();
     if (!s) return null;
-    const d = new Date(s);
+    var d = new Date(s);
     if (!isNaN(d.getTime())) return d;
   }
   return null;
 }
 
-/** 端数処理（四捨五入） */
-function roundToUnit_V3_(value, unit) {
-  const u = Number(unit || 1);
-  if (!isFinite(value)) return 0;
-  if (!isFinite(u) || u <= 0) return Math.round(value);
-  return Math.round(value / u) * u;
+/** 日数差（受傷→施術） */
+function diffDays_V3_(injury, treat) {
+  if (!(injury instanceof Date) || !(treat instanceof Date)) return null;
+  var a = new Date(injury.getFullYear(), injury.getMonth(), injury.getDate());
+  var b = new Date(treat.getFullYear(), treat.getMonth(), treat.getDate());
+  return Math.round((b.getTime() - a.getTime()) / (24 * 3600 * 1000));
+}
+
+/** 受傷日取得（確定列→入力列フォールバック） */
+function pickInjuryDate_V3_(row, detailMap) {
+  var cFixed = detailMap[AM_DETAIL_COLS.injuryDateFixed];
+  if (cFixed) {
+    var d = asDate_V3_(row[cFixed - 1]);
+    if (d) return d;
+  }
+  var cIn = detailMap[AM_DETAIL_COLS.injuryDateInput];
+  if (cIn) {
+    var d2 = asDate_V3_(row[cIn - 1]);
+    if (d2) return d2;
+  }
+  return null;
+}
+
+
+/* =======================================================================
+   (B) 施術明細シートベースの手動再計算
+   ======================================================================= */
+
+/** メニュー実行（visitKeyを入力） */
+function menuRecalcAmounts_V3() {
+  var ss = SpreadsheetApp.getActive();
+  var ui = SpreadsheetApp.getUi();
+
+  var res = ui.prompt(
+    "金額再計算",
+    "visitKey を入力してください（例：P0001_2026-02-15）",
+    ui.ButtonSet.OK_CANCEL
+  );
+  if (res.getSelectedButton() !== ui.Button.OK) return;
+
+  var visitKey = (res.getResponseText() || "").trim();
+  if (!visitKey) {
+    ui.alert("visitKey が空です。");
+    return;
+  }
+
+  var result = recalcAmountsByVisitKey_V3_(ss, visitKey);
+  ui.alert(
+    "完了：" + visitKey + "\n" +
+    "明細行更新：" + result.updatedRows + "\n" +
+    "来院合計：" + result.total + "\n" +
+    "窓口負担：" + result.copay + "\n" +
+    "保険請求：" + result.claim
+  );
+}
+
+/** visitKey単位で、施術明細→来院ヘッダを再計算 */
+function recalcAmountsByVisitKey_V3_(ss, visitKey) {
+  var settings = loadSettings_V3_(ss);
+
+  var detailSh = ss.getSheetByName(SHEETS.detail);
+  var headerSh = ss.getSheetByName(SHEETS.header);
+  var masterSh = ss.getSheetByName(SHEETS.master);
+
+  var maps = {
+    detail: buildHeaderColMap_(detailSh),
+    header: buildHeaderColMap_(headerSh),
+    master: buildHeaderColMap_(masterSh),
+  };
+
+  // 必須列チェック（不足なら即エラー＝事故ゼロ）
+  ensureRequiredCols_(maps.detail, Object.values(AM_DETAIL_COLS), SHEETS.detail);
+  ensureRequiredCols_(maps.header, [
+    HEADER_COLS.visitKey,
+    HEADER_COLS.visitTotal,
+    HEADER_COLS.windowPay,
+    HEADER_COLS.claimPay,
+  ], SHEETS.header);
+  ensureRequiredCols_(maps.master, [MASTER_COLS.patientId, MASTER_COLS.burden], SHEETS.master);
+
+  // 明細全取得
+  var detailValues = detailSh.getDataRange().getValues();
+  if (detailValues.length < 2) throw new Error("施術明細にデータがありません。");
+
+  // visitKey該当行を収集（0-based index）
+  var vkCol0 = maps.detail[AM_DETAIL_COLS.visitKey] - 1;
+  var rows0 = [];
+  for (var r0 = 1; r0 < detailValues.length; r0++) {
+    if (String(detailValues[r0][vkCol0] || "").trim() === visitKey) rows0.push(r0);
+  }
+  if (!rows0.length) throw new Error("施術明細で visitKey=" + visitKey + " が見つかりません。");
+
+  // 患者ID
+  var pidCol0 = maps.detail[AM_DETAIL_COLS.patientId] - 1;
+  var patientId = String(detailValues[rows0[0]][pidCol0] || "").trim();
+  if (!patientId) throw new Error("施術明細の患者IDが空です。");
+
+  // 負担割合
+  var burden = loadBurdenRatio_V3_(masterSh, maps.master, patientId);
+
+  var total = 0;
+
+  // 明細行ごとに金額算定＆書き込み
+  for (var i = 0; i < rows0.length; i++) {
+    var r0 = rows0[i];
+    var row = detailValues[r0];
+
+    var kubun = String(row[maps.detail[AM_DETAIL_COLS.kubun] - 1] || "").trim();
+    var byomei = String(row[maps.detail[AM_DETAIL_COLS.byomei] - 1] || "").trim();
+
+    var treatDate = asDate_V3_(row[maps.detail[AM_DETAIL_COLS.treatDate] - 1]);
+    var injuryDate = pickInjuryDate_V3_(row, maps.detail);
+
+    var partOrder = Number(row[maps.detail[AM_DETAIL_COLS.partOrder] - 1] || 0) || 0;
+    var coef = (partOrder >= 3) ? Number(settings.multiCoef3 || 0.6) : 1.0;
+
+    var coldChk = row[maps.detail[AM_DETAIL_COLS.coldChk] - 1] === true;
+    var warmChk = row[maps.detail[AM_DETAIL_COLS.warmChk] - 1] === true;
+    var electroChk = row[maps.detail[AM_DETAIL_COLS.electroChk] - 1] === true;
+
+    var injuryType = detectInjuryType_V3_(byomei);
+    var base = calcBaseFee_V3_(settings, kubun, injuryType);
+
+    // 相談支援：運用ON列が無いので事故防止で0固定
+    var support = 0;
+
+    var dayDiff = diffDays_V3_(injuryDate, treatDate);
+
+    // ★厚労省運用ルール
+    var cold = (coldChk && kubun === "初検" && dayDiff != null && dayDiff <= 1)
+      ? settings.cold : 0;
+    var warm = (warmChk && (kubun === "再検" || kubun === "後療") && dayDiff != null && dayDiff >= 5)
+      ? settings.warm : 0;
+    var electro = (electroChk && (kubun === "再検" || kubun === "後療") && dayDiff != null && dayDiff >= 5)
+      ? settings.electro : 0;
+    var taiki = ((warm > 0 || electro > 0) && (kubun === "再検" || kubun === "後療") && dayDiff != null && dayDiff >= 5)
+      ? settings.taiki : 0;
+
+    var rowTotal = (base + support + cold + warm + electro + taiki) * coef;
+    total += rowTotal;
+
+    // 書き込み（1-based行/列）
+    var row1 = r0 + 1;
+    detailSh.getRange(row1, maps.detail[AM_DETAIL_COLS.coefOut]).setValue(coef);
+    detailSh.getRange(row1, maps.detail[AM_DETAIL_COLS.baseOut]).setValue(base);
+    detailSh.getRange(row1, maps.detail[AM_DETAIL_COLS.supportOut]).setValue(support);
+    detailSh.getRange(row1, maps.detail[AM_DETAIL_COLS.coldOut]).setValue(cold);
+    detailSh.getRange(row1, maps.detail[AM_DETAIL_COLS.warmOut]).setValue(warm);
+    detailSh.getRange(row1, maps.detail[AM_DETAIL_COLS.electroOut]).setValue(electro);
+    detailSh.getRange(row1, maps.detail[AM_DETAIL_COLS.taikiOut]).setValue(taiki);
+    detailSh.getRange(row1, maps.detail[AM_DETAIL_COLS.rowTotalOut]).setValue(rowTotal);
+  }
+
+  // 窓口・請求
+  var unit = settings.roundUnit || 1;
+  var copayRaw = total * burden;
+  var copay = roundToUnit_V3_(copayRaw, unit);
+  var claim = total - copay;
+
+  // ヘッダ行を探して更新
+  var headerValues = headerSh.getDataRange().getValues();
+  var hkCol0 = maps.header[HEADER_COLS.visitKey] - 1;
+  var headerRow0 = -1;
+  for (var r0 = 1; r0 < headerValues.length; r0++) {
+    if (String(headerValues[r0][hkCol0] || "").trim() === visitKey) {
+      headerRow0 = r0;
+      break;
+    }
+  }
+  if (headerRow0 === -1) throw new Error("来院ヘッダで visitKey=" + visitKey + " が見つかりません。");
+
+  var hr1 = headerRow0 + 1;
+  headerSh.getRange(hr1, maps.header[HEADER_COLS.visitTotal]).setValue(total);
+  headerSh.getRange(hr1, maps.header[HEADER_COLS.windowPay]).setValue(copay);
+  headerSh.getRange(hr1, maps.header[HEADER_COLS.claimPay]).setValue(claim);
+
+  return { updatedRows: rows0.length, total: total, copay: copay, claim: claim };
 }
