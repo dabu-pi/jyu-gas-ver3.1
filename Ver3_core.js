@@ -58,6 +58,13 @@ const UI = {
   // 終了日入力（明示）
   case1_endHeader: "G11",
   case2_endHeader: "G26",
+
+  // 会計ブロック（表示専用）
+  billing_visitTotal: "D2",
+  billing_windowPay: "D3",
+  billing_claimPay: "D4",
+  billing_needCheck: "D5",
+  billing_needCheckReason: "D6",
 };
 
 /** ===== 来院ケース列名（誤解ゼロ命名：部位1/2） ===== */
@@ -498,6 +505,12 @@ function saveVisit_V3() {
     caseIndex: 1
   });
 
+  // ④ 明細upsert（将来拡張ポイント: 施術明細シートへの書き込み）
+
+  // ⑤ UI会計ブロック更新
+  writeAmountsToUI_V3_(uiSh, amounts);
+
+  // ⑥ 経過履歴更新 / UIクリア
   refreshKeikaHistoryUI_V3();
   clearAfterSaveUI_V3_(uiSh);
   SpreadsheetApp.getUi().alert(
@@ -1426,7 +1439,32 @@ function clearEntryUI_V3() {
   uiSh.getRange(UI.case1_kubunView).clearContent();
   uiSh.getRange(UI.case2_kubunView).clearContent();
 
+  clearAmountsUI_V3_(uiSh);
+
   SpreadsheetApp.getUi().alert("自動入力エリアをクリアしました（B4は保持・書式は保持）。");
+}
+
+/** ===== UI会計ブロック書き込み ===== */
+function writeAmountsToUI_V3_(uiSh, amounts) {
+  uiSh.getRange(UI.billing_visitTotal).setValue(amounts.visitTotal);
+  uiSh.getRange(UI.billing_windowPay).setValue(amounts.windowPay);
+  uiSh.getRange(UI.billing_claimPay).setValue(amounts.claimPay);
+  uiSh.getRange(UI.billing_needCheck).setValue(amounts.needCheck ? true : false);
+
+  // 要確認理由: 内部";"区切り → UI表示時"\n"に変換、wrap有効
+  var reasonDisplay = (amounts.needCheckReason || "").replace(/;/g, "\n");
+  var reasonCell = uiSh.getRange(UI.billing_needCheckReason);
+  reasonCell.setValue(reasonDisplay);
+  reasonCell.setWrap(true);
+}
+
+/** ===== UI会計ブロッククリア ===== */
+function clearAmountsUI_V3_(uiSh) {
+  uiSh.getRange(UI.billing_visitTotal).clearContent();
+  uiSh.getRange(UI.billing_windowPay).clearContent();
+  uiSh.getRange(UI.billing_claimPay).clearContent();
+  uiSh.getRange(UI.billing_needCheck).clearContent();
+  uiSh.getRange(UI.billing_needCheckReason).clearContent();
 }
 
 /** ===== 保存後クリア ===== */
@@ -1450,6 +1488,8 @@ function clearAfterSaveUI_V3_(uiSh) {
 
   uiSh.getRange(UI.case1_kubunView).setValue("");
   uiSh.getRange(UI.case2_kubunView).setValue("");
+
+  // 会計ブロックは保存直後の確認用に残す（clearEntryUI_V3で初めてクリア）
 }
 
 /** ===== ヘッダー確認 ===== */
