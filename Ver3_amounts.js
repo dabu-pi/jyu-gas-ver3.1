@@ -223,7 +223,21 @@ function menuRecalcAmounts_V3() {
   );
 }
 
-/** visitKey単位で、施術明細→来院ヘッダを再計算 */
+/**
+ * visitKey単位で、施術明細→来院ヘッダを再計算（SPEC.md準拠版）
+ *
+ * 冷罨法ルール（§9.1）:
+ *   打撲/捻挫: dayDiff≤1
+ *   脱臼: dayDiff≤4
+ *   骨折/不全骨折: dayDiff≤6
+ *
+ * 温罨法/電療ルール（§9.2）:
+ *   打撲/捻挫/脱臼: dayDiff≥5
+ *   骨折/不全骨折: dayDiff≥7
+ *
+ * 後療料: 初検日以外の施術日（再検/後療）に算定
+ * 安全弁: 算定不可→金額0、チェック残す、要確認TRUE、理由記録
+ */
 function recalcAmountsByVisitKey_V3_(ss, visitKey) {
   var settings = loadSettings_V3_(ss);
 
@@ -268,6 +282,7 @@ function recalcAmountsByVisitKey_V3_(ss, visitKey) {
   var burden = loadBurdenRatio_V3_(masterSh, maps.master, patientId);
 
   var total = 0;
+  var reasons = [];
 
   // 明細行ごとに金額算定＆書き込み
   for (var i = 0; i < rows0.length; i++) {
@@ -288,6 +303,8 @@ function recalcAmountsByVisitKey_V3_(ss, visitKey) {
     var electroChk = row[maps.detail[AM_DETAIL_COLS.electroChk] - 1] === true;
 
     var injuryType = detectInjuryType_V3_(byomei);
+
+    // 後療料: 後療/再検の日に算定（初検日は基本料を施療料として別途算定済み）
     var base = calcBaseFee_V3_(settings, kubun, injuryType);
 
     // 相談支援：運用ON列が無いので事故防止で0固定
@@ -295,15 +312,67 @@ function recalcAmountsByVisitKey_V3_(ss, visitKey) {
 
     var dayDiff = diffDays_V3_(injuryDate, treatDate);
 
-    // ★厚労省運用ルール
-    var cold = (coldChk && kubun === "初検" && dayDiff != null && dayDiff <= 1)
-      ? settings.cold : 0;
-    var warm = (warmChk && (kubun === "再検" || kubun === "後療") && dayDiff != null && dayDiff >= 5)
-      ? settings.warm : 0;
-    var electro = (electroChk && (kubun === "再検" || kubun === "後療") && dayDiff != null && dayDiff >= 5)
-      ? settings.electro : 0;
-    var taiki = ((warm > 0 || electro > 0) && (kubun === "再検" || kubun === "後療") && dayDiff != null && dayDiff >= 5)
-      ? settings.taiki : 0;
+    // 拡張傷病種別判定（脱臼・骨折対応）
+    var extType = detectExtendedInjuryType_V3_(byomei);
+
+    // --- 冷罨法 §9.1 ---
+    var cold = 0;
+    if (coldChk) {
+      var coldAllowed = false;
+      if (dayDiff != null) {
+        if (extType === "骨折" || extType === "不全骨折") {
+          coldAllowed = (dayDiff <= 6);
+        } else if (extType === "脱臼") {
+          coldAllowed = (dayDiff <= 4);
+        } else {
+          coldAllowed = (dayDiff <= 1);
+        }
+      }
+      if (coldAllowed) {
+        cold = settings.cold;
+      } else {
+        reasons.push("冷罨法 算定不可（" + (byomei || "不明") + "：受傷後" + (dayDiff != null ? dayDiff : "?") + "日）");
+      }
+    }
+
+    // --- 温罨法 §9.2 ---
+    var warm = 0;
+    if (warmChk) {
+      var warmAllowed = false;
+      if (dayDiff != null) {
+        if (extType === "骨折" || extType === "不全骨折") {
+          warmAllowed = (dayDiff >= 7);
+        } else {
+          warmAllowed = (dayDiff >= 5);
+        }
+      }
+      if (warmAllowed) {
+        warm = settings.warm;
+      } else {
+        reasons.push("温罨法 算定不可（" + (byomei || "不明") + "：受傷後" + (dayDiff != null ? dayDiff : "?") + "日）");
+      }
+    }
+
+    // --- 電療 §9.2 ---
+    var electro = 0;
+    if (electroChk) {
+      var elecAllowed = false;
+      if (dayDiff != null) {
+        if (extType === "骨折" || extType === "不全骨折") {
+          elecAllowed = (dayDiff >= 7);
+        } else {
+          elecAllowed = (dayDiff >= 5);
+        }
+      }
+      if (elecAllowed) {
+        electro = settings.electro;
+      } else {
+        reasons.push("電療 算定不可（" + (byomei || "不明") + "：受傷後" + (dayDiff != null ? dayDiff : "?") + "日）");
+      }
+    }
+
+    // 待機料（温/電いずれかが算定可のとき）
+    var taiki = (warm > 0 || electro > 0) ? settings.taiki : 0;
 
     var rowTotal = (base + support + cold + warm + electro + taiki) * coef;
     total += rowTotal;
@@ -342,6 +411,14 @@ function recalcAmountsByVisitKey_V3_(ss, visitKey) {
   headerSh.getRange(hr1, maps.header[HEADER_COLS.visitTotal]).setValue(total);
   headerSh.getRange(hr1, maps.header[HEADER_COLS.windowPay]).setValue(copay);
   headerSh.getRange(hr1, maps.header[HEADER_COLS.claimPay]).setValue(claim);
+
+  // 要確認フラグ・理由の更新
+  if (maps.header[HEADER_COLS.needCheck]) {
+    headerSh.getRange(hr1, maps.header[HEADER_COLS.needCheck]).setValue(reasons.length > 0);
+  }
+  if (maps.header[HEADER_COLS.needCheckReason]) {
+    headerSh.getRange(hr1, maps.header[HEADER_COLS.needCheckReason]).setValue(reasons.join(";"));
+  }
 
   return { updatedRows: rows0.length, total: total, copay: copay, claim: claim };
 }
