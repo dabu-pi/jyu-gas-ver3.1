@@ -380,6 +380,16 @@ function readRowNewUI_(uiSh, a1) {
   return { part: part, disease: disease, injuryDate: injuryDate, cold: cold, warm: warm, elec: elec, endVal: endVal, hasCore: hasCore };
 }
 
+/** ===== UIにケースデータがあるか判定（部位・傷病・受傷日のいずれか） ===== */
+function hasCaseDataInUI_(uiSh, caseNo) {
+  var rows = (caseNo === 1) ? UI.case1_rows : UI.case2_rows;
+  for (var i = 0; i < rows.length; i++) {
+    var line = readRowNewUI_(uiSh, rows[i]);
+    if (line.hasCore) return true;
+  }
+  return false;
+}
+
 /** ===== 来院ケースから患者の来院日一覧 ===== */
 function getPatientVisitDatesFromCases_(caseSh, caseMap, patientId) {
   var lastRow = caseSh.getLastRow();
@@ -439,8 +449,15 @@ function saveVisit_V3() {
   }
 
   // ① 来院ケースへ保存
+  // UIに実データがあるケースのみ区分を有効にする（空ケースの"初検"誤判定を防止）
+  var case1HasData = hasCaseDataInUI_(uiSh, 1);
+  var case2HasData = hasCaseDataInUI_(uiSh, 2);
+
   var ep1 = calcEpisodeForCase_(caseSh, caseMap, patientId, treatDate, 1);
   var ep2 = calcEpisodeForCase_(caseSh, caseMap, patientId, treatDate, 2);
+
+  var kubun1 = case1HasData ? ep1.kubun : "";
+  var kubun2 = case2HasData ? ep2.kubun : "";
 
   upsertOneCase_(uiSh, caseSh, caseMap, {
     visitKey: visitKey, patientId: patientId, treatDate: treatDate,
@@ -459,7 +476,9 @@ function saveVisit_V3() {
   });
 
   // ② 金額計算（来院ケースベース）
-  var amounts = calcHeaderAmountsByVisitKey_V3_(ss, visitKey, patientId, treatDate, ep1.kubun, ep2.kubun);
+  // ※ upsertOneCase_ はデータ無しなら早期returnするが、
+  //    金額計算には「UIに実データがあるケースの区分のみ」を渡す
+  var amounts = calcHeaderAmountsByVisitKey_V3_(ss, visitKey, patientId, treatDate, kubun1, kubun2);
 
   // ③ 来院ヘッダへ1行追記
   var injuryFixed = null;
@@ -481,7 +500,7 @@ function saveVisit_V3() {
   var lastVisit = findLastVisitDateInHeader_(headSh, headMap, patientId, treatDate);
   var gapDays = (lastVisit instanceof Date) ? daysBetween_(lastVisit, treatDate) : "";
 
-  var kubunLabel = ep1.kubun || ep2.kubun || "";
+  var kubunLabel = kubun1 || kubun2 || "";
 
   appendHeaderRow_V3_(headSh, headMap, {
     visitKey: visitKey,
