@@ -530,7 +530,8 @@ function V3TR_emptyAgg_() {
   };
 }
 function V3TR_caseNoFromCaseKey_(caseKey) {
-  const m = String(caseKey || "").match(/\|C([12])$/);
+  // 新形式 _C1/_C2 と旧形式 |C1/|C2 の両方を認識
+  const m = String(caseKey || "").match(/(?:\|C|_C)([12])$/);
   return m ? Number(m[1]) : 0;
 }
 function V3TR_num_(v) {
