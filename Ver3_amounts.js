@@ -26,7 +26,7 @@
 /** ===== 設定キー（設定シートA列）===== */
 const AM_SET_KEYS = {
   initFee: "初検料",
-  initSupport: "初検時相談支援",
+  initSupport: "初検時相談支援料",
   reFee: "再検料",
   shoryoDaboku: "施療料_打撲",
   shoryoNenZa: "施療料_捻挫",
@@ -38,7 +38,7 @@ const AM_SET_KEYS = {
   warm: "温罨法",
   electro: "電療",
   taiki: "待機_打撲捻挫挫傷",
-  multiCoef3: "多部位_3部位",
+  multiCoef3: "多部位_3部位目係数",
   roundUnit: "窓口端数単位",
 };
 
