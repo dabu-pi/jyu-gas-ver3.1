@@ -290,8 +290,15 @@ function minDate_(d1, d2) {
 function buildVisitKey_(patientId, treatDate) {
   return patientId + "_" + fmt_(treatDate, "yyyy-MM-dd");
 }
-function buildCaseKey_(visitKey, caseNo) {
-  return visitKey + "_C" + caseNo;
+/**
+ * caseKey = エピソードID（初検日ベース、エピソード中は不変）
+ * 形式: 患者ID_エピソード開始日_C{caseNo}
+ */
+function buildCaseKey_(patientId, episodeStartDate, caseNo) {
+  var dateStr = (episodeStartDate instanceof Date)
+    ? fmt_(episodeStartDate, "yyyy-MM-dd")
+    : String(episodeStartDate || "");
+  return patientId + "_" + dateStr + "_C" + caseNo;
 }
 
 /** ===== 必須列チェック（シート名・実ヘッダー付きエラー） ===== */
@@ -319,6 +326,24 @@ function findRowByKey_(sheet, map, keyHeaderName, keyValue) {
   var vals = sheet.getRange(2, c, lastRow - 1, 1).getValues().flat();
   for (var i = 0; i < vals.length; i++) {
     if (String(vals[i] || "").trim() === String(keyValue)) return i + 2;
+  }
+  return 0;
+}
+
+/** ===== visitKey + caseNo 複合キーで来院ケース行を検索 ===== */
+function findCaseRowByVisitKeyAndCaseNo_(caseSh, caseMap, visitKey, caseNo) {
+  var lastRow = caseSh.getLastRow();
+  if (lastRow < 2) return 0;
+  var n = lastRow - 1;
+  var cVk = caseMap[CASE_COLS.visitKey];
+  var cNo = caseMap[CASE_COLS.caseNo];
+  if (!cVk || !cNo) return 0;
+  var vkVals = caseSh.getRange(2, cVk, n, 1).getValues().flat();
+  var noVals = caseSh.getRange(2, cNo, n, 1).getValues().flat();
+  for (var i = 0; i < n; i++) {
+    if (String(vkVals[i] || "").trim() === visitKey && Number(noVals[i] || 0) === caseNo) {
+      return i + 2;
+    }
   }
   return 0;
 }
@@ -482,15 +507,13 @@ function saveVisit_V3() {
 
   // ③ 来院ヘッダへ1行追記
   var injuryFixed = null;
-  var caseKey1 = buildCaseKey_(visitKey, 1);
-  var row1idx = findRowByKey_(caseSh, caseMap, CASE_COLS.caseKey, caseKey1);
+  var row1idx = findCaseRowByVisitKeyAndCaseNo_(caseSh, caseMap, visitKey, 1);
   if (row1idx > 0) {
     var v = caseSh.getRange(row1idx, caseMap[CASE_COLS.injuryFixed], 1, 1).getValue();
     if (v instanceof Date) injuryFixed = v;
   }
   if (!injuryFixed) {
-    var caseKey2 = buildCaseKey_(visitKey, 2);
-    var row2idx = findRowByKey_(caseSh, caseMap, CASE_COLS.caseKey, caseKey2);
+    var row2idx = findCaseRowByVisitKeyAndCaseNo_(caseSh, caseMap, visitKey, 2);
     if (row2idx > 0) {
       var v2 = caseSh.getRange(row2idx, caseMap[CASE_COLS.injuryFixed], 1, 1).getValue();
       if (v2 instanceof Date) injuryFixed = v2;
@@ -520,8 +543,10 @@ function saveVisit_V3() {
     needCheck: amounts.needCheck ? true : false,
     needCheckReason: amounts.needCheckReason || "",
     createdAt: now,
-    caseKey: buildCaseKey_(visitKey, 1),
-    caseIndex: 1
+    caseKey: case1HasData
+      ? buildCaseKey_(patientId, ep1.episodeStartDate, 1)
+      : buildCaseKey_(patientId, ep2.episodeStartDate, 2),
+    caseIndex: case1HasData ? 1 : 2
   });
 
   // ④ 明細upsert（将来拡張ポイント: 施術明細シートへの書き込み）
@@ -734,8 +759,8 @@ function checkIsNextVisitAfterMonthlyInit_(headSh, headMap, caseSh, caseMap, pat
 
 /** 1ケース分の明細金額を来院ケースの部位データから算定（SPEC準拠版） */
 function calcCaseDetailAmount_V3_(caseSh, caseMap, visitKey, caseNo, kubun, treatDate, settings, reasons) {
-  var caseKey = buildCaseKey_(visitKey, caseNo);
-  var rowIndex = findRowByKey_(caseSh, caseMap, CASE_COLS.caseKey, caseKey);
+  // 来院ケース行は visitKey + caseNo で検索
+  var rowIndex = findCaseRowByVisitKeyAndCaseNo_(caseSh, caseMap, visitKey, caseNo);
   if (rowIndex === 0) return 0;
 
   var row = caseSh.getRange(rowIndex, 1, 1, caseSh.getLastColumn()).getValues()[0];
@@ -956,8 +981,10 @@ function upsertOneCase_(uiSh, caseSh, caseMap, base) {
   if (!hasAny) return;
 
   var injuryFixed = minDate_(line1.injuryDate, line2.injuryDate);
-  var caseKey = buildCaseKey_(visitKey, caseNo);
-  var rowIndex = findRowByKey_(caseSh, caseMap, CASE_COLS.caseKey, caseKey);
+  // caseKey = エピソードID（初検日ベース）
+  var caseKey = buildCaseKey_(patientId, episodeStartDate, caseNo);
+  // 来院ケース行の検索は visitKey + caseNo 複合キー
+  var rowIndex = findCaseRowByVisitKeyAndCaseNo_(caseSh, caseMap, visitKey, caseNo);
 
   if (rowIndex === 0) {
     var rowArr = new Array(caseSh.getLastColumn()).fill("");
@@ -1345,8 +1372,8 @@ function exportHeaderFromCases_V3() {
 
     if (!visitKey || !patientId || !(treatDate instanceof Date) || !caseKey || !caseIndex) continue;
 
-    var uniq = caseKey + "#" + caseIndex;
-    if (existed.has(uniq)) continue;
+    // 重複チェックは visitKey 単位（来院ヘッダは1来院日1行）
+    if (existed.has(visitKey)) continue;
 
     var rowArr = new Array(headSh.getLastColumn()).fill("");
 
@@ -1373,7 +1400,7 @@ function exportHeaderFromCases_V3() {
     setByName_(rowArr, headMap, HEADER_COLS.caseIndex, caseIndex);
 
     out.push(rowArr);
-    existed.add(uniq);
+    existed.add(visitKey);
   }
 
   if (!out.length) {
@@ -1390,17 +1417,14 @@ function buildExistingHeaderKeySet_(headSh, headMap) {
   var lastRow = headSh.getLastRow();
   if (lastRow < 2) return set;
 
-  var cCaseKey = headMap[HEADER_COLS.caseKey];
-  var cCaseIdx = headMap[HEADER_COLS.caseIndex];
-  if (!cCaseKey || !cCaseIdx) return set;
+  var cVisitKey = headMap[HEADER_COLS.visitKey];
+  if (!cVisitKey) return set;
 
-  var keys = headSh.getRange(2, cCaseKey, lastRow - 1, 1).getValues().flat();
-  var idxs = headSh.getRange(2, cCaseIdx, lastRow - 1, 1).getValues().flat();
+  var keys = headSh.getRange(2, cVisitKey, lastRow - 1, 1).getValues().flat();
 
   for (var i = 0; i < keys.length; i++) {
     var k = String(keys[i] || "").trim();
-    var n = Number(idxs[i] || 0);
-    if (k && n) set.add(k + "#" + n);
+    if (k) set.add(k);
   }
   return set;
 }
