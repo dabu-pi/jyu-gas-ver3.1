@@ -157,6 +157,7 @@ function onOpen() {
       .addItem("金額再計算（施術明細→ヘッダ）", "menuRecalcAmounts_V3")
       .addItem("申請書_転記データ作成（患者×月）", "V3TR_menuBuildTransferData")
       .addItem("入力バリデーション設定（傷病名プルダウン）", "setupValidation_V3")
+      .addItem("設定シート初期セットアップ", "ensureSettingsRows_V3")
       .addToUi();
   } catch (err) {
     console.error(err);
@@ -1882,4 +1883,105 @@ function setupValidation_V3() {
     "傷病名プルダウンを設定しました。\n対象: " + targetCells.join(", ") +
     "\n選択肢: " + names.join(", ")
   );
+}
+
+/* =====================================================
+   ensureSettingsRows_V3（設定シート初期セットアップ）
+   A列=キー名 / B列=単価 を不足分だけ追記する。
+   C列=傷病名一覧（プルダウンソース）も不足分を追記する。
+   既存行は上書きしない（手動変更を保護）。
+   ===================================================== */
+function ensureSettingsRows_V3() {
+  var ss = SpreadsheetApp.getActive();
+  var sh = ss.getSheetByName(SHEETS.settings);
+  if (!sh) throw new Error("設定シートが見つかりません");
+
+  // ===== A列・B列: 設定キーと既定値 =====
+  var requiredKeys = [
+    ["初検料", 1550],
+    ["初検時相談支援料", 50],
+    ["再検料", 410],
+    ["施療料_打撲", 820],
+    ["施療料_捻挫", 820],
+    ["施療料_挫傷", 820],
+    ["後療料_打撲", 620],
+    ["後療料_捻挫", 620],
+    ["後療料_挫傷", 620],
+    ["整復料_脱臼", 5200],
+    ["後療料_脱臼", 720],
+    ["冷罨法", 85],
+    ["温罨法", 37],
+    ["電療", 33],
+    ["待機_打撲捻挫挫傷", 100],
+    ["多部位_3部位目係数", 0.6],
+    ["窓口端数単位", 10],
+  ];
+
+  // 既存キーを収集
+  var lastRow = sh.getLastRow();
+  var existingKeys = new Set();
+  if (lastRow >= 2) {
+    var aVals = sh.getRange(2, 1, lastRow - 1, 1).getValues().flat();
+    for (var i = 0; i < aVals.length; i++) {
+      var k = String(aVals[i] || "").trim();
+      if (k) existingKeys.add(k);
+    }
+  }
+
+  // 不足分を追記
+  var addedKeys = [];
+  for (var j = 0; j < requiredKeys.length; j++) {
+    var key = requiredKeys[j][0];
+    var val = requiredKeys[j][1];
+    if (!existingKeys.has(key)) {
+      var nr = sh.getLastRow() + 1;
+      sh.getRange(nr, 1).setValue(key);
+      sh.getRange(nr, 2).setValue(val);
+      addedKeys.push(key);
+    }
+  }
+
+  // ===== C列: 傷病名一覧（プルダウンソース） =====
+  var requiredNames = ["打撲", "捻挫", "挫傷", "脱臼"];
+
+  var existingNames = new Set();
+  if (lastRow >= 2) {
+    var cVals = sh.getRange(2, 3, lastRow - 1, 1).getValues().flat();
+    for (var m = 0; m < cVals.length; m++) {
+      var n = String(cVals[m] || "").trim();
+      if (n) existingNames.add(n);
+    }
+  }
+
+  // C列の末尾行を特定（A/B列とは独立に管理）
+  var cLastRow = 1;
+  if (lastRow >= 2) {
+    var cAll = sh.getRange(2, 3, sh.getLastRow() - 1, 1).getValues().flat();
+    for (var p = cAll.length - 1; p >= 0; p--) {
+      if (String(cAll[p] || "").trim()) { cLastRow = p + 2; break; }
+    }
+  }
+
+  var addedNames = [];
+  for (var q = 0; q < requiredNames.length; q++) {
+    if (!existingNames.has(requiredNames[q])) {
+      cLastRow++;
+      sh.getRange(cLastRow, 3).setValue(requiredNames[q]);
+      addedNames.push(requiredNames[q]);
+    }
+  }
+
+  // 結果表示
+  var msg = "設定シート初期セットアップ完了\n\n";
+  if (addedKeys.length) {
+    msg += "【追加した設定キー（A列）】\n" + addedKeys.join(", ") + "\n\n";
+  } else {
+    msg += "【設定キー】すべて登録済み\n\n";
+  }
+  if (addedNames.length) {
+    msg += "【追加した傷病名（C列）】\n" + addedNames.join(", ");
+  } else {
+    msg += "【傷病名一覧】すべて登録済み";
+  }
+  SpreadsheetApp.getUi().alert(msg);
 }

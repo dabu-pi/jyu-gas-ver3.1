@@ -1011,8 +1011,37 @@ function V3TR_writeToApplication_(ss, row1, row2) {
     count++;
   }
 
+  /** テンプレ形式 {cell, tmpl} に数値を埋め込んで書き込む */
+  function putTmpl(spec, val) {
+    const n = Number(val);
+    if (!isFinite(n) || n === 0) return;
+    const text = spec.tmpl.replace("{amt}", n.toLocaleString());
+    sh.getRange(spec.cell).setValue(text);
+    count++;
+  }
+
+  /** 数値を1桁ずつ右詰めで配列セルに書き込む（合計欄用） */
+  function putDigits(cellArr, val) {
+    const n = Number(val);
+    if (!isFinite(n) || n === 0) return;
+    const digits = String(Math.round(n)).split("");
+    // 右詰め: 配列末尾から埋める
+    for (let i = cellArr.length - 1, d = digits.length - 1; i >= 0 && d >= 0; i--, d--) {
+      sh.getRange(cellArr[i]).setValue(Number(digits[d]));
+      count++;
+    }
+  }
+
   // ===== 保険者情報 =====
-  put(CM.保険者番号, row1["保険者番号"]);
+  // 保険者番号: 1桁ずつ（配列8セル）
+  const insurerNo = String(row1["保険者番号"] || "").trim();
+  if (insurerNo) {
+    const insurerCells = CM.保険者番号;
+    for (let i = 0; i < insurerNo.length && i < insurerCells.length; i++) {
+      sh.getRange(insurerCells[i]).setValue(insurerNo.charAt(i));
+      count++;
+    }
+  }
   put(CM.記号, row1["記号"]);
   put(CM.番号, row1["番号"]);
 
@@ -1053,20 +1082,28 @@ function V3TR_writeToApplication_(ss, row1, row2) {
   }
 
   // ===== 初検料・再検料 行33-34 =====
-  putNum(CM.初検料, row1["初検料_月額"]);
-  putNum(CM.初検時相談支援料, row1["初検時相談支援料_月額"]);
-  putNum(CM.再検料, row1["再検料_月額"]);
-  putNum(CM.基本3項目_計, row1["基本3項目_計"]);
+  // ★テンプレ形式: {cell, tmpl} → テキスト埋め込み
+  putTmpl(CM.初検料, row1["初検料_月額"]);
+  putTmpl(CM.初検時相談支援料, row1["初検時相談支援料_月額"]);
+  putTmpl(CM.再検料, row1["再検料_月額"]);
+  putTmpl(CM.基本3項目_計, row1["基本3項目_計"]);
 
   // ===== 施療料 行35 =====
+  // ★施療料セルも {cell, no} 形式 → cell プロパティを使う
+  // ※脱臼の整復料も「施療料」欄に記載する（申請書様式の規定）
   const shoryoData = V3TR_buildShoryoArray_(row1, row2);
   const shoryoCells = CM.施療料;
   for (let i = 0; i < shoryoData.length && i < shoryoCells.length; i++) {
-    putNum(shoryoCells[i], shoryoData[i]);
+    const amt = Number(shoryoData[i] || 0);
+    if (amt > 0) {
+      const label = "(" + shoryoCells[i].no + ")  " + amt.toLocaleString() + "円";
+      sh.getRange(shoryoCells[i].cell).setValue(label);
+      count++;
+    }
   }
   // 施療料計 = case1 + case2
   const shoryoTotal = Number(row1["施療料_計"] || 0) + Number((row2 || {})["施療料_計"] || 0);
-  putNum(CM.施療料_計, shoryoTotal);
+  putTmpl(CM.施療料_計, shoryoTotal);
 
   // ===== 部位別明細 行38-43 =====
   // case1部位1 → 行38, case1部位2 → 行39, case2部位1 → 行40, case2部位2 → 行42
@@ -1093,9 +1130,10 @@ function V3TR_writeToApplication_(ss, row1, row2) {
   }
 
   // ===== 合計欄 行44-46 =====
-  putNum(CM.合計, row1["当月合計"]);
-  putNum(CM.一部負担金, row1["窓口負担額"]);
-  putNum(CM.請求金額, row1["請求金額"]);
+  // ★1桁ずつ右詰め（配列6セル + "円"固定）
+  putDigits(CM.合計, row1["当月合計"]);
+  putDigits(CM.一部負担金, row1["窓口負担額"]);
+  putDigits(CM.請求金額, row1["請求金額"]);
 
   return count;
 }
@@ -1256,7 +1294,9 @@ function V3TR_putDateYMD_(sh, cellY, cellM, cellD, dateVal) {
   const d = (dateVal instanceof Date) ? dateVal : new Date(dateVal);
   if (isNaN(d.getTime())) return;
 
-  sh.getRange(cellY).setValue(d.getFullYear());
+  // ★申請書は和暦年で記載する（appCellMapコメント参照）
+  const era = V3TR_toWareki_(d);
+  sh.getRange(cellY).setValue(era.year);
   sh.getRange(cellM).setValue(d.getMonth() + 1);
   sh.getRange(cellD).setValue(d.getDate());
 }
