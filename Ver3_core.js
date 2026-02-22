@@ -156,6 +156,7 @@ function onOpen() {
       .addItem("ヘッダー確認（デバッグ）", "checkHeaders_V3")
       .addItem("金額再計算（施術明細→ヘッダ）", "menuRecalcAmounts_V3")
       .addItem("申請書_転記データ作成（患者×月）", "V3TR_menuBuildTransferData")
+      .addItem("入力バリデーション設定（傷病名プルダウン）", "setupValidation_V3")
       .addToUi();
   } catch (err) {
     console.error(err);
@@ -549,7 +550,22 @@ function saveVisit_V3() {
     caseIndex: case1HasData ? 1 : 2
   });
 
-  // ④ 明細upsert（将来拡張ポイント: 施術明細シートへの書き込み）
+  // ④ 施術明細upsert
+  var detailSh = ss.getSheetByName(SHEETS.detail);
+  if (detailSh) {
+    var detailMap = buildHeaderColMap_(detailSh);
+    upsertDetailRows_V3_(detailSh, detailMap, {
+      visitKey: visitKey,
+      patientId: patientId,
+      treatDate: treatDate,
+      kubun1: kubun1,
+      kubun2: kubun2,
+      amounts: amounts,
+      ep1: ep1,
+      ep2: ep2,
+      now: now,
+    });
+  }
 
   // ⑤ UI会計ブロック更新
   writeAmountsToUI_V3_(uiSh, amounts);
@@ -647,7 +663,7 @@ function calcHeaderAmountsByVisitKey_V3_(ss, visitKey, patientId, treatDate, kub
 
   var detail1 = calcCaseDetailAmount_V3_(caseSh, caseMap, visitKey, 1, effectiveKubun1, treatDate, settings, reasons);
   var detail2 = calcCaseDetailAmount_V3_(caseSh, caseMap, visitKey, 2, effectiveKubun2, treatDate, settings, reasons);
-  var detailSum = detail1 + detail2;
+  var detailSum = detail1.total + detail2.total;
 
   // --- 来院合計 = 初検料 + 再検料 + 相談支援料 + 明細合計 ---
   var visitTotal = initFee + reFee + supportFee + detailSum;
@@ -668,7 +684,8 @@ function calcHeaderAmountsByVisitKey_V3_(ss, visitKey, patientId, treatDate, kub
     windowPay: windowPay,
     claimPay: claimPay,
     needCheck: needCheck,
-    needCheckReason: needCheckReason
+    needCheckReason: needCheckReason,
+    details: { case1Parts: detail1.parts, case2Parts: detail2.parts }
   };
 }
 
@@ -757,17 +774,20 @@ function checkIsNextVisitAfterMonthlyInit_(headSh, headMap, caseSh, caseMap, pat
   return sameDateKey_(nextVisitDate) === sameDateKey_(treatDate);
 }
 
-/** 1ケース分の明細金額を来院ケースの部位データから算定（SPEC準拠版） */
+/** 1ケース分の明細金額を来院ケースの部位データから算定（SPEC準拠版）
+ *  @return {{ total: number, parts: Object[] }} 合計と部位別内訳配列
+ */
 function calcCaseDetailAmount_V3_(caseSh, caseMap, visitKey, caseNo, kubun, treatDate, settings, reasons) {
   // 来院ケース行は visitKey + caseNo で検索
   var rowIndex = findCaseRowByVisitKeyAndCaseNo_(caseSh, caseMap, visitKey, caseNo);
-  if (rowIndex === 0) return 0;
+  if (rowIndex === 0) return { total: 0, parts: [] };
 
   var row = caseSh.getRange(rowIndex, 1, 1, caseSh.getLastColumn()).getValues()[0];
   var get = function(name) { return row[caseMap[name] - 1]; };
 
   var total = 0;
   var partCount = 0;
+  var parts = [];
 
   // 部位1
   var p1 = String(get(CASE_COLS.p1) || "").trim();
@@ -775,11 +795,14 @@ function calcCaseDetailAmount_V3_(caseSh, caseMap, visitKey, caseNo, kubun, trea
   var inj1 = get(CASE_COLS.inj1);
   if (p1 || d1 || (inj1 instanceof Date)) {
     partCount++;
-    total += calcOnePartAmount_V3_(settings, kubun, d1, inj1, treatDate,
+    var part1 = calcOnePartAmount_V3_(settings, kubun, d1, inj1, treatDate,
       get(CASE_COLS.cold1) === true,
       get(CASE_COLS.warm1) === true,
       get(CASE_COLS.elec1) === true,
       partCount, reasons);
+    part1.bui = p1;
+    total += part1.total;
+    parts.push(part1);
   }
 
   // 部位2
@@ -788,14 +811,17 @@ function calcCaseDetailAmount_V3_(caseSh, caseMap, visitKey, caseNo, kubun, trea
   var inj2 = get(CASE_COLS.inj2);
   if (p2 || d2 || (inj2 instanceof Date)) {
     partCount++;
-    total += calcOnePartAmount_V3_(settings, kubun, d2, inj2, treatDate,
+    var part2 = calcOnePartAmount_V3_(settings, kubun, d2, inj2, treatDate,
       get(CASE_COLS.cold2) === true,
       get(CASE_COLS.warm2) === true,
       get(CASE_COLS.elec2) === true,
       partCount, reasons);
+    part2.bui = p2;
+    total += part2.total;
+    parts.push(part2);
   }
 
-  return total;
+  return { total: total, parts: parts };
 }
 
 /**
@@ -896,7 +922,21 @@ function calcOnePartAmount_V3_(settings, kubun, byomei, injuryDate, treatDate, c
   // 多部位逓減 §10
   var coef = (partOrder >= 3) ? Number(settings.multiCoef3 || 0.6) : 1.0;
 
-  return (base + cold + warm + electro + taiki) * coef;
+  return {
+    base: base,
+    cold: cold,
+    warm: warm,
+    electro: electro,
+    taiki: taiki,
+    coef: coef,
+    total: (base + cold + warm + electro + taiki) * coef,
+    byomei: byomei,
+    partOrder: partOrder,
+    injuryDate: injuryDate,
+    coldChk: coldChk,
+    warmChk: warmChk,
+    electroChk: elecChk,
+  };
 }
 
 /** 拡張傷病種別判定（脱臼・骨折・不全骨折を含む） */
@@ -952,6 +992,90 @@ function appendHeaderRow_V3_(headSh, headMap, obj) {
   setByName_(rowArr, headMap, HEADER_COLS.caseIndex, obj.caseIndex);
 
   headSh.getRange(headSh.getLastRow() + 1, 1, 1, headSh.getLastColumn()).setValues([rowArr]);
+}
+
+
+/* =======================================================================
+   upsertDetailRows_V3_  ―  施術明細シートへ部位行をupsert
+   detailID = visitKey + "_C" + caseNo + "_P" + partOrder
+   ======================================================================= */
+function upsertDetailRows_V3_(detailSh, detailMap, ctx) {
+  var visitKey = ctx.visitKey;
+  var amounts = ctx.amounts;
+  if (!amounts.details) return;
+
+  var allParts = [];
+
+  // caseKey生成
+  var caseKey1 = buildCaseKey_(ctx.patientId, ctx.ep1.episodeStartDate, 1);
+  var caseKey2 = buildCaseKey_(ctx.patientId, ctx.ep2.episodeStartDate, 2);
+
+  // case1
+  var c1Parts = amounts.details.case1Parts || [];
+  for (var i = 0; i < c1Parts.length; i++) {
+    allParts.push({ caseNo: 1, part: c1Parts[i], kubun: ctx.kubun1, caseKey: caseKey1 });
+  }
+
+  // case2
+  var c2Parts = amounts.details.case2Parts || [];
+  for (var j = 0; j < c2Parts.length; j++) {
+    allParts.push({ caseNo: 2, part: c2Parts[j], kubun: ctx.kubun2, caseKey: caseKey2 });
+  }
+
+  var colCount = detailSh.getLastColumn();
+
+  for (var k = 0; k < allParts.length; k++) {
+    var entry = allParts[k];
+    var p = entry.part;
+    var detailID = visitKey + "_C" + entry.caseNo + "_P" + p.partOrder;
+
+    // 既存行検索
+    var existingRow = 0;
+    if (detailMap[AM_DETAIL_COLS.detailID]) {
+      existingRow = findRowByKey_(detailSh, detailMap, AM_DETAIL_COLS.detailID, detailID);
+    }
+
+    var rowArr;
+    if (existingRow > 0) {
+      // 既存行を読み込んで上書き
+      rowArr = detailSh.getRange(existingRow, 1, 1, colCount).getValues()[0];
+    } else {
+      rowArr = new Array(colCount).fill("");
+    }
+
+    setByName_(rowArr, detailMap, AM_DETAIL_COLS.detailID, detailID);
+    setByName_(rowArr, detailMap, AM_DETAIL_COLS.visitKey, visitKey);
+    setByName_(rowArr, detailMap, AM_DETAIL_COLS.patientId, ctx.patientId);
+    setByName_(rowArr, detailMap, AM_DETAIL_COLS.treatDate, ctx.treatDate);
+    setByName_(rowArr, detailMap, AM_DETAIL_COLS.kubun, entry.kubun);
+    setByName_(rowArr, detailMap, AM_DETAIL_COLS.caseNo, entry.caseNo);
+    setByName_(rowArr, detailMap, AM_DETAIL_COLS.caseKey, entry.caseKey);
+    setByName_(rowArr, detailMap, AM_DETAIL_COLS.bui, p.bui || "");
+    setByName_(rowArr, detailMap, AM_DETAIL_COLS.byomei, p.byomei || "");
+    setByName_(rowArr, detailMap, AM_DETAIL_COLS.partOrder, p.partOrder);
+    if (p.injuryDate instanceof Date) {
+      setByName_(rowArr, detailMap, AM_DETAIL_COLS.injuryDateFixed, p.injuryDate);
+    }
+    setByName_(rowArr, detailMap, AM_DETAIL_COLS.coldChk, p.coldChk);
+    setByName_(rowArr, detailMap, AM_DETAIL_COLS.warmChk, p.warmChk);
+    setByName_(rowArr, detailMap, AM_DETAIL_COLS.electroChk, p.electroChk);
+
+    // 確定金額
+    setByName_(rowArr, detailMap, AM_DETAIL_COLS.coefOut, p.coef);
+    setByName_(rowArr, detailMap, AM_DETAIL_COLS.baseOut, p.base);
+    setByName_(rowArr, detailMap, AM_DETAIL_COLS.supportOut, 0);
+    setByName_(rowArr, detailMap, AM_DETAIL_COLS.coldOut, p.cold);
+    setByName_(rowArr, detailMap, AM_DETAIL_COLS.warmOut, p.warm);
+    setByName_(rowArr, detailMap, AM_DETAIL_COLS.electroOut, p.electro);
+    setByName_(rowArr, detailMap, AM_DETAIL_COLS.taikiOut, p.taiki);
+    setByName_(rowArr, detailMap, AM_DETAIL_COLS.rowTotalOut, p.total);
+
+    if (existingRow > 0) {
+      detailSh.getRange(existingRow, 1, 1, colCount).setValues([rowArr]);
+    } else {
+      detailSh.getRange(detailSh.getLastRow() + 1, 1, 1, colCount).setValues([rowArr]);
+    }
+  }
 }
 
 
@@ -1709,4 +1833,53 @@ function partExists_(src, idx) {
   if (!src) return false;
   if (idx === 1) return !!(String(src.p1||"").trim() || String(src.d1||"").trim() || (src.inj1 instanceof Date));
   return !!(String(src.p2||"").trim() || String(src.d2||"").trim() || (src.inj2 instanceof Date));
+}
+
+/* =====================================================
+   setupValidation_V3（傷病名プルダウン設定）
+   設定シートC列の傷病名一覧を読み取り、
+   患者画面のB12, B13, B27, B28にプルダウンを設定する。
+   ===================================================== */
+function setupValidation_V3() {
+  var ss = SpreadsheetApp.getActive();
+  var settingsSh = ss.getSheetByName(SHEETS.settings);
+  var uiSh = ss.getSheetByName(SHEETS.ui);
+  if (!settingsSh) throw new Error("設定シートが見つかりません");
+  if (!uiSh) throw new Error("患者画面シートが見つかりません");
+
+  // 設定シートC列から傷病名一覧を取得（C2以降、空セルまで）
+  var lastRow = settingsSh.getLastRow();
+  if (lastRow < 2) {
+    SpreadsheetApp.getUi().alert("設定シートC列に傷病名一覧がありません。C2以降に傷病名を入力してください。");
+    return;
+  }
+
+  var values = settingsSh.getRange(2, 3, lastRow - 1, 1).getValues().flat();
+  var names = [];
+  for (var i = 0; i < values.length; i++) {
+    var v = String(values[i] || "").trim();
+    if (!v) break;
+    names.push(v);
+  }
+
+  if (!names.length) {
+    SpreadsheetApp.getUi().alert("設定シートC列に傷病名が見つかりません。C2以降に傷病名を入力してください。");
+    return;
+  }
+
+  // プルダウン設定対象セル: B12, B13, B27, B28
+  var targetCells = ["B12", "B13", "B27", "B28"];
+  var rule = SpreadsheetApp.newDataValidation()
+    .requireValueInList(names, true)
+    .setAllowInvalid(false)
+    .build();
+
+  for (var j = 0; j < targetCells.length; j++) {
+    uiSh.getRange(targetCells[j]).setDataValidation(rule);
+  }
+
+  SpreadsheetApp.getUi().alert(
+    "傷病名プルダウンを設定しました。\n対象: " + targetCells.join(", ") +
+    "\n選択肢: " + names.join(", ")
+  );
 }
