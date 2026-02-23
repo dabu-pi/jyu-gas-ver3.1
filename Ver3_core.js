@@ -972,6 +972,17 @@ function calcOnePartAmount_V3_(settings, kubun, byomei, injuryDate, treatDate, c
   // 待機料（温/電いずれかが算定可のとき）
   var taiki = (warm > 0 || electro > 0) ? settings.taiki : 0;
 
+  // 長期減額 §11（骨折・不全骨折は対象外）
+  var ltCoef = calcLongTermCoef_V3_(injuryType, injuryDate, treatDate);
+  if (ltCoef < 1.0) {
+    reasons.push("長期減額75%適用（" + byomei + "）");
+  }
+  // 長期対象: 後療料(再検/後療時のbase)・冷・温・電。初検時のbaseと待機料は非対象
+  var ltBase = (kubun === "初検") ? base : Math.round(base * ltCoef);
+  var ltCold = Math.round(cold * ltCoef);
+  var ltWarm = Math.round(warm * ltCoef);
+  var ltElectro = Math.round(electro * ltCoef);
+
   // 多部位逓減 §10
   var coef = (partOrder >= 3) ? Number(settings.multiCoef3 || 0.6) : 1.0;
 
@@ -982,7 +993,8 @@ function calcOnePartAmount_V3_(settings, kubun, byomei, injuryDate, treatDate, c
     electro: electro,
     taiki: taiki,
     coef: coef,
-    total: (base + cold + warm + electro + taiki) * coef,
+    longTermCoef: ltCoef,
+    total: (ltBase + ltCold + ltWarm + ltElectro + taiki) * coef,
     byomei: byomei,
     partOrder: partOrder,
     injuryDate: injuryDate,

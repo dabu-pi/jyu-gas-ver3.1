@@ -304,12 +304,43 @@ function menuRecalcAmounts_V3() {
 }
 
 /**
+ * 長期減額係数の算定（§11）
+ * 骨折・不全骨折は対象外。受傷日の起算月から5か月超で75%。
+ * @return {number} 1.0（減額なし）or 0.75（長期75%）
+ */
+function calcLongTermCoef_V3_(injuryType, injuryDate, treatDate) {
+  // 骨折・不全骨折は長期減額の対象外
+  if (injuryType === "骨折" || injuryType === "不全骨折") return 1.0;
+  // 受傷日・施術日が不明なら減額なし
+  if (!(injuryDate instanceof Date) || !(treatDate instanceof Date)) return 1.0;
+
+  // 起算月を計算（受傷日が16日以降なら翌月起算）
+  var startYear = injuryDate.getFullYear();
+  var startMonth = injuryDate.getMonth(); // 0-indexed
+  if (injuryDate.getDate() >= 16) {
+    startMonth++;
+    if (startMonth > 11) { startMonth = 0; startYear++; }
+  }
+
+  // 施術日の年月
+  var treatYear = treatDate.getFullYear();
+  var treatMonth = treatDate.getMonth();
+
+  // 起算月からの経過月数
+  var monthsElapsed = (treatYear - startYear) * 12 + (treatMonth - startMonth);
+
+  // 5か月超（6か月目以降）→ 75%
+  if (monthsElapsed >= 5) return 0.75;
+  return 1.0;
+}
+
+/**
  * 1部位分の金額算定（object返却版）
  *
  * Ver3_core.js 側の同名関数と同じロジックだが、
  * 内訳オブジェクトを返す点が異なる。
  *
- * @return {Object} { base, cold, warm, electro, taiki, coef, total, byomei, partOrder, coldChk, warmChk, electroChk, injuryDate }
+ * @return {Object} { base, cold, warm, electro, taiki, coef, longTermCoef, total, byomei, partOrder, coldChk, warmChk, electroChk, injuryDate }
  */
 function calcOnePartAmount_V3_(settings, kubun, byomei, injuryDate, treatDate, coldChk, warmChk, elecChk, partOrder, reasons, bui) {
   var injuryType = detectInjuryType_V3_(byomei);
@@ -386,6 +417,17 @@ function calcOnePartAmount_V3_(settings, kubun, byomei, injuryDate, treatDate, c
   // 待機料（温/電いずれかが算定可のとき）
   var taiki = (warm > 0 || electro > 0) ? settings.taiki : 0;
 
+  // 長期減額 §11（骨折・不全骨折は対象外）
+  var ltCoef = calcLongTermCoef_V3_(injuryType, injuryDate, treatDate);
+  if (ltCoef < 1.0) {
+    reasons.push("長期減額75%適用（" + byomei + "）");
+  }
+  // 長期対象: 後療料(再検/後療時のbase)・冷・温・電。初検時のbaseと待機料は非対象
+  var ltBase = (kubun === "初検") ? base : Math.round(base * ltCoef);
+  var ltCold = Math.round(cold * ltCoef);
+  var ltWarm = Math.round(warm * ltCoef);
+  var ltElectro = Math.round(electro * ltCoef);
+
   // 多部位逓減 §10
   var coef = (partOrder >= 3) ? Number(settings.multiCoef3 || 0.6) : 1.0;
 
@@ -396,7 +438,8 @@ function calcOnePartAmount_V3_(settings, kubun, byomei, injuryDate, treatDate, c
     electro: electro,
     taiki: taiki,
     coef: coef,
-    total: (base + cold + warm + electro + taiki) * coef,
+    longTermCoef: ltCoef,
+    total: (ltBase + ltCold + ltWarm + ltElectro + taiki) * coef,
     byomei: byomei,
     partOrder: partOrder,
     injuryDate: injuryDate,
