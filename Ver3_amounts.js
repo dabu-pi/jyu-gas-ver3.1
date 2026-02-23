@@ -38,6 +38,11 @@ const AM_SET_KEYS = {
   // 脱臼（§17.2）
   seifukuDakkyu: "整復料_脱臼",
   koryoDakkyu: "後療料_脱臼",
+  // 骨折・不全骨折（§17.3）
+  koryoKossetu: "後療料_骨折",
+  koryoFuzenKossetu: "後療料_不全骨折",
+  seifukuKossetuPrefix: "整復料_骨折_",  // 動的キー: "整復料_骨折_前腕" 等
+  koteiPrefix: "固定料_",                 // 動的キー: "固定料_前腕" 等
   cold: "冷罨法",
   warm: "温罨法",
   electro: "電療",
@@ -108,12 +113,17 @@ function loadSettings_V3_(ss) {
     // 脱臼（§17.2）
     seifukuDakkyu: Number(map[AM_SET_KEYS.seifukuDakkyu] || 0),
     koryoDakkyu: Number(map[AM_SET_KEYS.koryoDakkyu] || 0),
+    // 骨折・不全骨折（§17.3）— 後療料は固定値
+    koryoKossetu: Number(map[AM_SET_KEYS.koryoKossetu] || 0),
+    koryoFuzenKossetu: Number(map[AM_SET_KEYS.koryoFuzenKossetu] || 0),
     cold: Number(map[AM_SET_KEYS.cold] || 0),
     warm: Number(map[AM_SET_KEYS.warm] || 0),
     electro: Number(map[AM_SET_KEYS.electro] || 0),
     taiki: Number(map[AM_SET_KEYS.taiki] || 0),
     multiCoef3: Number(map[AM_SET_KEYS.multiCoef3] || 0.6),
     roundUnit: Number(map[AM_SET_KEYS.roundUnit] || 1),
+    // 動的キー参照用（部位別整復料/固定料）
+    _rawMap: map,
   };
 }
 
@@ -133,9 +143,58 @@ function loadBurdenRatio_V3_(masterSh, masterMap, patientId) {
   throw new Error("患者マスタに患者ID=" + patientId + "が見つかりません。");
 }
 
-/** 基本料（設定シート通り） §17参照 */
-function calcBaseFee_V3_(settings, kubun, injuryType) {
+/**
+ * 部位名(bui)から設定シートキーの部位コードを返す。
+ * 例: "右前腕" → "前腕", "左鎖骨" → "鎖骨", "右第3中手骨" → "指_趾"
+ * @param {string} bui - 部位名（患者画面のA列入力値）
+ * @return {string|null} 設定シートの部位別キーに使うサフィックス
+ */
+function mapBuiToSettingKey_V3_(bui) {
+  if (!bui) return null;
+  // 長い文字列を先にマッチ（前腕 vs 腕 等の誤マッチ防止）
+  var rules = [
+    { keywords: ["鎖骨"], key: "鎖骨" },
+    { keywords: ["肋骨"], key: "肋骨" },
+    { keywords: ["前腕", "橈骨", "尺骨"], key: "前腕" },
+    { keywords: ["上腕"], key: "上腕" },
+    { keywords: ["下腿", "脛骨", "腓骨"], key: "下腿" },
+    { keywords: ["大腿"], key: "大腿" },
+    { keywords: ["指", "趾", "中手骨", "中足骨", "基節骨", "末節骨"], key: "指_趾" },
+  ];
+  for (var i = 0; i < rules.length; i++) {
+    for (var j = 0; j < rules[i].keywords.length; j++) {
+      if (bui.indexOf(rules[i].keywords[j]) !== -1) return rules[i].key;
+    }
+  }
+  return null;
+}
+
+/** 基本料（設定シート通り） §17参照
+ * @param {Object} settings - loadSettings_V3_ の返り値
+ * @param {string} kubun - "初検" / "再検" / "後療"
+ * @param {string} injuryType - detectInjuryType_V3_ の返り値
+ * @param {string} [bui] - 部位名（骨折・不全骨折の初検日のみ必要）
+ */
+function calcBaseFee_V3_(settings, kubun, injuryType, bui) {
   if (kubun === "初検") {
+    // 骨折: 整復料（部位別）
+    if (injuryType === "骨折") {
+      var buiKey = mapBuiToSettingKey_V3_(bui);
+      if (buiKey && settings._rawMap) {
+        var val = settings._rawMap[AM_SET_KEYS.seifukuKossetuPrefix + buiKey];
+        if (val != null && isFinite(Number(val))) return Number(val);
+      }
+      return 0; // 部位不明 → 0（要確認フラグで補捉）
+    }
+    // 不全骨折: 固定料（部位別）
+    if (injuryType === "不全骨折") {
+      var buiKey2 = mapBuiToSettingKey_V3_(bui);
+      if (buiKey2 && settings._rawMap) {
+        var val2 = settings._rawMap[AM_SET_KEYS.koteiPrefix + buiKey2];
+        if (val2 != null && isFinite(Number(val2))) return Number(val2);
+      }
+      return 0;
+    }
     if (injuryType === "脱臼") return settings.seifukuDakkyu;  // 整復料（脱臼）
     if (injuryType === "打撲") return settings.shoryoDaboku;
     if (injuryType === "捻挫") return settings.shoryoNenZa;
@@ -143,7 +202,9 @@ function calcBaseFee_V3_(settings, kubun, injuryType) {
     return 0;
   }
   if (kubun === "再検" || kubun === "後療") {
-    if (injuryType === "脱臼") return settings.koryoDakkyu;    // 後療料（脱臼）
+    if (injuryType === "骨折") return settings.koryoKossetu;         // 後療料（骨折）850円
+    if (injuryType === "不全骨折") return settings.koryoFuzenKossetu; // 後療料（不全骨折）720円
+    if (injuryType === "脱臼") return settings.koryoDakkyu;
     if (injuryType === "打撲") return settings.koryoDaboku;
     if (injuryType === "捻挫") return settings.koryoNenZa;
     if (injuryType === "挫傷") return settings.koryoZasyo;
@@ -152,9 +213,13 @@ function calcBaseFee_V3_(settings, kubun, injuryType) {
   return 0;
 }
 
-/** 傷病名→打撲/捻挫/挫傷/脱臼 判別（基本料算定用） */
+/** 傷病名→傷病種別 判別（基本料算定用）
+ *  判定順序: 不全骨折→骨折→脱臼→打撲→捻挫→挫傷
+ *  ※「不全骨折」は「骨折」を含むため先に判定する */
 function detectInjuryType_V3_(byomei) {
   if (!byomei) return null;
+  if (byomei.indexOf("不全骨折") !== -1) return "不全骨折";
+  if (byomei.indexOf("骨折") !== -1) return "骨折";
   if (byomei.indexOf("脱臼") !== -1) return "脱臼";
   if (byomei.indexOf("打撲") !== -1) return "打撲";
   if (byomei.indexOf("捻挫") !== -1) return "捻挫";
@@ -246,9 +311,14 @@ function menuRecalcAmounts_V3() {
  *
  * @return {Object} { base, cold, warm, electro, taiki, coef, total, byomei, partOrder, coldChk, warmChk, electroChk, injuryDate }
  */
-function calcOnePartAmount_V3_(settings, kubun, byomei, injuryDate, treatDate, coldChk, warmChk, elecChk, partOrder, reasons) {
+function calcOnePartAmount_V3_(settings, kubun, byomei, injuryDate, treatDate, coldChk, warmChk, elecChk, partOrder, reasons, bui) {
   var injuryType = detectInjuryType_V3_(byomei);
-  var base = calcBaseFee_V3_(settings, kubun, injuryType);
+  var base = calcBaseFee_V3_(settings, kubun, injuryType, bui);
+
+  // 骨折・不全骨折で整復料/固定料が取得できない場合
+  if (base === 0 && kubun === "初検" && (injuryType === "骨折" || injuryType === "不全骨折")) {
+    reasons.push("整復料/固定料 取得不可（" + (bui || "部位不明") + "：設定シートにキーがありません）");
+  }
 
   var dayDiff = null;
   if (injuryDate instanceof Date && treatDate instanceof Date) {
@@ -414,8 +484,9 @@ function recalcAmountsByVisitKey_V3_(ss, visitKey) {
     var warmChk = row[maps.detail[AM_DETAIL_COLS.warmChk] - 1] === true;
     var electroChk = row[maps.detail[AM_DETAIL_COLS.electroChk] - 1] === true;
 
+    var buiVal = String(row[maps.detail[AM_DETAIL_COLS.bui] - 1] || "").trim();
     var part = calcOnePartAmount_V3_(settings, kubun, byomei, injuryDate, treatDate,
-      coldChk, warmChk, electroChk, partOrder, reasons);
+      coldChk, warmChk, electroChk, partOrder, reasons, buiVal);
 
     // 相談支援：運用ON列が無いので事故防止で0固定
     var support = 0;

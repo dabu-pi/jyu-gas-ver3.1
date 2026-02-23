@@ -800,7 +800,7 @@ function calcCaseDetailAmount_V3_(caseSh, caseMap, visitKey, caseNo, kubun, trea
       get(CASE_COLS.cold1) === true,
       get(CASE_COLS.warm1) === true,
       get(CASE_COLS.elec1) === true,
-      partCount, reasons);
+      partCount, reasons, p1);
     part1.bui = p1;
     total += part1.total;
     parts.push(part1);
@@ -816,7 +816,7 @@ function calcCaseDetailAmount_V3_(caseSh, caseMap, visitKey, caseNo, kubun, trea
       get(CASE_COLS.cold2) === true,
       get(CASE_COLS.warm2) === true,
       get(CASE_COLS.elec2) === true,
-      partCount, reasons);
+      partCount, reasons, p2);
     part2.bui = p2;
     total += part2.total;
     parts.push(part2);
@@ -840,12 +840,17 @@ function calcCaseDetailAmount_V3_(caseSh, caseMap, visitKey, caseNo, kubun, trea
  *   打撲/捻挫/脱臼: 受傷後5日間不可→6日目以降可（dayDiff≥5）
  *   骨折/不全骨折: 受傷後7日間不可→8日目以降可（dayDiff≥7）
  */
-function calcOnePartAmount_V3_(settings, kubun, byomei, injuryDate, treatDate, coldChk, warmChk, elecChk, partOrder, reasons) {
+function calcOnePartAmount_V3_(settings, kubun, byomei, injuryDate, treatDate, coldChk, warmChk, elecChk, partOrder, reasons, bui) {
   var injuryType = detectInjuryType_V3_(byomei);
 
-  // 部位別基本料（施療料 or 後療料）
-  // 初検日 → 施療料、再検/後療日 → 後療料（calcBaseFee_V3_が区分で分岐）
-  var base = calcBaseFee_V3_(settings, kubun, injuryType);
+  // 部位別基本料（施療料/後療料/整復料/固定料）
+  // 初検日 → 施療料or整復料or固定料、再検/後療日 → 後療料（calcBaseFee_V3_が区分で分岐）
+  var base = calcBaseFee_V3_(settings, kubun, injuryType, bui);
+
+  // 骨折・不全骨折で整復料/固定料が取得できない場合
+  if (base === 0 && kubun === "初検" && (injuryType === "骨折" || injuryType === "不全骨折")) {
+    reasons.push("整復料/固定料 取得不可（" + (bui || "部位不明") + "：設定シートにキーがありません）");
+  }
 
   var dayDiff = null;
   if (injuryDate instanceof Date && treatDate instanceof Date) {
@@ -1909,6 +1914,23 @@ function ensureSettingsRows_V3() {
     ["後療料_挫傷", 620],
     ["整復料_脱臼", 5200],
     ["後療料_脱臼", 720],
+    // 骨折（§17.3）
+    ["後療料_骨折", 850],
+    ["後療料_不全骨折", 720],
+    ["整復料_骨折_鎖骨", 5500],
+    ["整復料_骨折_肋骨", 5500],
+    ["整復料_骨折_指_趾", 5500],
+    ["整復料_骨折_前腕", 7200],
+    ["整復料_骨折_上腕", 7800],
+    ["整復料_骨折_下腿", 7800],
+    ["整復料_骨折_大腿", 11800],
+    ["固定料_鎖骨", 3000],
+    ["固定料_肋骨", 3000],
+    ["固定料_指_趾", 3000],
+    ["固定料_前腕", 4100],
+    ["固定料_上腕", 4600],
+    ["固定料_下腿", 4600],
+    ["固定料_大腿", 7200],
     ["冷罨法", 85],
     ["温罨法", 37],
     ["電療", 33],
@@ -1942,7 +1964,7 @@ function ensureSettingsRows_V3() {
   }
 
   // ===== C列: 傷病名一覧（プルダウンソース） =====
-  var requiredNames = ["打撲", "捻挫", "挫傷", "脱臼"];
+  var requiredNames = ["打撲", "捻挫", "挫傷", "脱臼", "骨折", "不全骨折"];
 
   var existingNames = new Set();
   if (lastRow >= 2) {
