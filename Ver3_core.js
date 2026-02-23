@@ -184,11 +184,36 @@ function onEdit(e) {
       var rows = (caseNo === 1) ? UI.case1_rows : UI.case2_rows;
       var line1 = readRowNewUI_(sh, rows[0]);
       var line2 = readRowNewUI_(sh, rows[1]);
+
+      // 近接部位チェック
       var prox = checkProximityParts_V3_(line1.part, line1.disease, line2.part, line2.disease);
       if (prox.isProximity) {
         SpreadsheetApp.getActive().toast(
           "⚠ " + prox.reason + "\n部位または傷病名を修正してください。",
           "近接部位の警告",
+          8
+        );
+        return;
+      }
+
+      // 骨折/不全骨折の部位名キーワード検証
+      var buiWarnings = [];
+      var lines = [line1, line2];
+      for (var li = 0; li < lines.length; li++) {
+        var ln = lines[li];
+        if (!ln.part || !ln.disease) continue;
+        var iType = detectInjuryType_V3_(ln.disease);
+        if (iType === "骨折" || iType === "不全骨折") {
+          if (!mapBuiToSettingKey_V3_(ln.part)) {
+            buiWarnings.push("「" + ln.part + "」→ 部位キーワード不一致（整復料/固定料が0円になります）");
+          }
+        }
+      }
+      if (buiWarnings.length > 0) {
+        SpreadsheetApp.getActive().toast(
+          "⚠ " + buiWarnings.join("\n") +
+          "\n有効な部位名: 鎖骨, 肋骨, 前腕, 上腕, 下腿, 大腿, 指, 趾 等",
+          "部位名の警告",
           8
         );
       }
@@ -2061,20 +2086,47 @@ function setupValidation_V3() {
     return;
   }
 
-  // プルダウン設定対象セル: B12, B13, B27, B28
-  var targetCells = ["B12", "B13", "B27", "B28"];
-  var rule = SpreadsheetApp.newDataValidation()
+  // B列: 傷病名プルダウン（選択必須）
+  var diseaseCells = ["B12", "B13", "B27", "B28"];
+  var diseaseRule = SpreadsheetApp.newDataValidation()
     .requireValueInList(names, true)
     .setAllowInvalid(false)
     .build();
 
-  for (var j = 0; j < targetCells.length; j++) {
-    uiSh.getRange(targetCells[j]).setDataValidation(rule);
+  for (var j = 0; j < diseaseCells.length; j++) {
+    uiSh.getRange(diseaseCells[j]).setDataValidation(diseaseRule);
+  }
+
+  // D列から部位名候補を取得（D2以降、空セルまで）
+  var dValues = settingsSh.getRange(2, 4, lastRow - 1, 1).getValues().flat();
+  var partNames = [];
+  for (var k = 0; k < dValues.length; k++) {
+    var pv = String(dValues[k] || "").trim();
+    if (!pv) break;
+    partNames.push(pv);
+  }
+
+  // A列: 部位名プルダウン（自由入力も許可）
+  var partMsg = "";
+  if (partNames.length) {
+    var partCells = ["A12", "A13", "A27", "A28"];
+    var partRule = SpreadsheetApp.newDataValidation()
+      .requireValueInList(partNames, true)
+      .setAllowInvalid(true)
+      .build();
+
+    for (var m = 0; m < partCells.length; m++) {
+      uiSh.getRange(partCells[m]).setDataValidation(partRule);
+    }
+    partMsg = "\n部位名候補プルダウン: " + partCells.join(", ") + "（自由入力も可）" +
+              "\n候補: " + partNames.join(", ");
   }
 
   SpreadsheetApp.getUi().alert(
-    "傷病名プルダウンを設定しました。\n対象: " + targetCells.join(", ") +
-    "\n選択肢: " + names.join(", ")
+    "バリデーションを設定しました。\n" +
+    "傷病名プルダウン: " + diseaseCells.join(", ") +
+    "\n選択肢: " + names.join(", ") +
+    partMsg
   );
 }
 
@@ -2181,6 +2233,43 @@ function ensureSettingsRows_V3() {
     }
   }
 
+  // ===== D列: 部位名候補（プルダウンソース） =====
+  var requiredParts = [
+    "頸部", "背部", "腰部",
+    "肩関節", "上腕", "肘関節", "前腕", "手関節",
+    "股関節", "大腿", "膝関節", "下腿", "足関節",
+    "鎖骨", "肋骨",
+    "指", "趾"
+  ];
+
+  var existingParts = new Set();
+  var curLastRow = sh.getLastRow();
+  if (curLastRow >= 2) {
+    var dVals = sh.getRange(2, 4, curLastRow - 1, 1).getValues().flat();
+    for (var r = 0; r < dVals.length; r++) {
+      var pv = String(dVals[r] || "").trim();
+      if (pv) existingParts.add(pv);
+    }
+  }
+
+  // D列の末尾行を特定
+  var dLastRow = 1;
+  if (curLastRow >= 2) {
+    var dAll = sh.getRange(2, 4, curLastRow - 1, 1).getValues().flat();
+    for (var s = dAll.length - 1; s >= 0; s--) {
+      if (String(dAll[s] || "").trim()) { dLastRow = s + 2; break; }
+    }
+  }
+
+  var addedParts = [];
+  for (var t = 0; t < requiredParts.length; t++) {
+    if (!existingParts.has(requiredParts[t])) {
+      dLastRow++;
+      sh.getRange(dLastRow, 4).setValue(requiredParts[t]);
+      addedParts.push(requiredParts[t]);
+    }
+  }
+
   // 結果表示
   var msg = "設定シート初期セットアップ完了\n\n";
   if (addedKeys.length) {
@@ -2189,9 +2278,14 @@ function ensureSettingsRows_V3() {
     msg += "【設定キー】すべて登録済み\n\n";
   }
   if (addedNames.length) {
-    msg += "【追加した傷病名（C列）】\n" + addedNames.join(", ");
+    msg += "【追加した傷病名（C列）】\n" + addedNames.join(", ") + "\n\n";
   } else {
-    msg += "【傷病名一覧】すべて登録済み";
+    msg += "【傷病名一覧】すべて登録済み\n\n";
+  }
+  if (addedParts.length) {
+    msg += "【追加した部位名候補（D列）】\n" + addedParts.join(", ");
+  } else {
+    msg += "【部位名候補】すべて登録済み";
   }
   SpreadsheetApp.getUi().alert(msg);
 }
