@@ -157,6 +157,7 @@ function onOpen() {
       .addItem("金額再計算（施術明細→ヘッダ）", "menuRecalcAmounts_V3")
       .addItem("申請書_転記データ作成（患者×月）", "V3TR_menuBuildTransferData")
       .addItem("入力バリデーション設定（傷病名プルダウン）", "setupValidation_V3")
+      .addItem("設定シート初期セットアップ", "ensureSettingsRows_V3")
       .addToUi();
   } catch (err) {
     console.error(err);
@@ -799,7 +800,7 @@ function calcCaseDetailAmount_V3_(caseSh, caseMap, visitKey, caseNo, kubun, trea
       get(CASE_COLS.cold1) === true,
       get(CASE_COLS.warm1) === true,
       get(CASE_COLS.elec1) === true,
-      partCount, reasons);
+      partCount, reasons, p1);
     part1.bui = p1;
     total += part1.total;
     parts.push(part1);
@@ -815,7 +816,7 @@ function calcCaseDetailAmount_V3_(caseSh, caseMap, visitKey, caseNo, kubun, trea
       get(CASE_COLS.cold2) === true,
       get(CASE_COLS.warm2) === true,
       get(CASE_COLS.elec2) === true,
-      partCount, reasons);
+      partCount, reasons, p2);
     part2.bui = p2;
     total += part2.total;
     parts.push(part2);
@@ -839,12 +840,17 @@ function calcCaseDetailAmount_V3_(caseSh, caseMap, visitKey, caseNo, kubun, trea
  *   打撲/捻挫/脱臼: 受傷後5日間不可→6日目以降可（dayDiff≥5）
  *   骨折/不全骨折: 受傷後7日間不可→8日目以降可（dayDiff≥7）
  */
-function calcOnePartAmount_V3_(settings, kubun, byomei, injuryDate, treatDate, coldChk, warmChk, elecChk, partOrder, reasons) {
+function calcOnePartAmount_V3_(settings, kubun, byomei, injuryDate, treatDate, coldChk, warmChk, elecChk, partOrder, reasons, bui) {
   var injuryType = detectInjuryType_V3_(byomei);
 
-  // 部位別基本料（施療料 or 後療料）
-  // 初検日 → 施療料、再検/後療日 → 後療料（calcBaseFee_V3_が区分で分岐）
-  var base = calcBaseFee_V3_(settings, kubun, injuryType);
+  // 部位別基本料（施療料/後療料/整復料/固定料）
+  // 初検日 → 施療料or整復料or固定料、再検/後療日 → 後療料（calcBaseFee_V3_が区分で分岐）
+  var base = calcBaseFee_V3_(settings, kubun, injuryType, bui);
+
+  // 骨折・不全骨折で整復料/固定料が取得できない場合
+  if (base === 0 && kubun === "初検" && (injuryType === "骨折" || injuryType === "不全骨折")) {
+    reasons.push("整復料/固定料 取得不可（" + (bui || "部位不明") + "：設定シートにキーがありません）");
+  }
 
   var dayDiff = null;
   if (injuryDate instanceof Date && treatDate instanceof Date) {
@@ -1882,4 +1888,122 @@ function setupValidation_V3() {
     "傷病名プルダウンを設定しました。\n対象: " + targetCells.join(", ") +
     "\n選択肢: " + names.join(", ")
   );
+}
+
+/* =====================================================
+   ensureSettingsRows_V3（設定シート初期セットアップ）
+   A列=キー名 / B列=単価 を不足分だけ追記する。
+   C列=傷病名一覧（プルダウンソース）も不足分を追記する。
+   既存行は上書きしない（手動変更を保護）。
+   ===================================================== */
+function ensureSettingsRows_V3() {
+  var ss = SpreadsheetApp.getActive();
+  var sh = ss.getSheetByName(SHEETS.settings);
+  if (!sh) throw new Error("設定シートが見つかりません");
+
+  // ===== A列・B列: 設定キーと既定値 =====
+  var requiredKeys = [
+    ["初検料", 1550],
+    ["初検時相談支援料", 50],
+    ["再検料", 410],
+    ["施療料_打撲", 820],
+    ["施療料_捻挫", 820],
+    ["施療料_挫傷", 820],
+    ["後療料_打撲", 620],
+    ["後療料_捻挫", 620],
+    ["後療料_挫傷", 620],
+    ["整復料_脱臼", 5200],
+    ["後療料_脱臼", 720],
+    // 骨折（§17.3）
+    ["後療料_骨折", 850],
+    ["後療料_不全骨折", 720],
+    ["整復料_骨折_鎖骨", 5500],
+    ["整復料_骨折_肋骨", 5500],
+    ["整復料_骨折_指_趾", 5500],
+    ["整復料_骨折_前腕", 7200],
+    ["整復料_骨折_上腕", 7800],
+    ["整復料_骨折_下腿", 7800],
+    ["整復料_骨折_大腿", 11800],
+    ["固定料_鎖骨", 3000],
+    ["固定料_肋骨", 3000],
+    ["固定料_指_趾", 3000],
+    ["固定料_前腕", 4100],
+    ["固定料_上腕", 4600],
+    ["固定料_下腿", 4600],
+    ["固定料_大腿", 7200],
+    ["冷罨法", 85],
+    ["温罨法", 37],
+    ["電療", 33],
+    ["待機_打撲捻挫挫傷", 100],
+    ["多部位_3部位目係数", 0.6],
+    ["窓口端数単位", 10],
+  ];
+
+  // 既存キーを収集
+  var lastRow = sh.getLastRow();
+  var existingKeys = new Set();
+  if (lastRow >= 2) {
+    var aVals = sh.getRange(2, 1, lastRow - 1, 1).getValues().flat();
+    for (var i = 0; i < aVals.length; i++) {
+      var k = String(aVals[i] || "").trim();
+      if (k) existingKeys.add(k);
+    }
+  }
+
+  // 不足分を追記
+  var addedKeys = [];
+  for (var j = 0; j < requiredKeys.length; j++) {
+    var key = requiredKeys[j][0];
+    var val = requiredKeys[j][1];
+    if (!existingKeys.has(key)) {
+      var nr = sh.getLastRow() + 1;
+      sh.getRange(nr, 1).setValue(key);
+      sh.getRange(nr, 2).setValue(val);
+      addedKeys.push(key);
+    }
+  }
+
+  // ===== C列: 傷病名一覧（プルダウンソース） =====
+  var requiredNames = ["打撲", "捻挫", "挫傷", "脱臼", "骨折", "不全骨折"];
+
+  var existingNames = new Set();
+  if (lastRow >= 2) {
+    var cVals = sh.getRange(2, 3, lastRow - 1, 1).getValues().flat();
+    for (var m = 0; m < cVals.length; m++) {
+      var n = String(cVals[m] || "").trim();
+      if (n) existingNames.add(n);
+    }
+  }
+
+  // C列の末尾行を特定（A/B列とは独立に管理）
+  var cLastRow = 1;
+  if (lastRow >= 2) {
+    var cAll = sh.getRange(2, 3, sh.getLastRow() - 1, 1).getValues().flat();
+    for (var p = cAll.length - 1; p >= 0; p--) {
+      if (String(cAll[p] || "").trim()) { cLastRow = p + 2; break; }
+    }
+  }
+
+  var addedNames = [];
+  for (var q = 0; q < requiredNames.length; q++) {
+    if (!existingNames.has(requiredNames[q])) {
+      cLastRow++;
+      sh.getRange(cLastRow, 3).setValue(requiredNames[q]);
+      addedNames.push(requiredNames[q]);
+    }
+  }
+
+  // 結果表示
+  var msg = "設定シート初期セットアップ完了\n\n";
+  if (addedKeys.length) {
+    msg += "【追加した設定キー（A列）】\n" + addedKeys.join(", ") + "\n\n";
+  } else {
+    msg += "【設定キー】すべて登録済み\n\n";
+  }
+  if (addedNames.length) {
+    msg += "【追加した傷病名（C列）】\n" + addedNames.join(", ");
+  } else {
+    msg += "【傷病名一覧】すべて登録済み";
+  }
+  SpreadsheetApp.getUi().alert(msg);
 }
