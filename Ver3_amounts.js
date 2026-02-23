@@ -356,7 +356,7 @@ function calcOnePartAmount_V3_(settings, kubun, byomei, injuryDate, treatDate, c
     dayDiff = diffDays_V3_(injuryDate, treatDate);
   }
 
-  var extType = detectExtendedInjuryType_V3_(byomei);
+  var extType = detectInjuryType_V3_(byomei);
 
   // --- 冷罨法 §9.1 ---
   var cold = 0;
@@ -447,6 +447,245 @@ function calcOnePartAmount_V3_(settings, kubun, byomei, injuryDate, treatDate, c
     warmChk: warmChk,
     electroChk: elecChk,
   };
+}
+
+/* =======================================================================
+   calcHeaderAmountsByVisitKey_V3_  ―  金額計算（来院ケースベース）
+   SPEC.md 完全準拠版
+   - 患者×月上限（初検料/再検料/相談支援料 各月1回）
+   - 30日ルール（区分はcalcEpisodeForCase_で確定済み）
+   - 再検料は当月初検の次回来院日のみ
+   - 後療料は初検日以外の施術日（再検日は再検＋後療）
+   - 冷温電は傷病種別×受傷日経過で算定可否判定
+   - 安全弁：算定不可→金額0＋要確認TRUE＋理由記録
+   ======================================================================= */
+function calcHeaderAmountsByVisitKey_V3_(ss, visitKey, patientId, treatDate, kubun1, kubun2) {
+  var settings = loadSettings_V3_(ss);
+
+  var masterSh = ss.getSheetByName(SHEETS.master);
+  var masterMap = buildHeaderColMap_(masterSh);
+  var burden = loadBurdenRatio_V3_(masterSh, masterMap, patientId);
+
+  var caseSh = ss.getSheetByName(SHEETS.cases);
+  var caseMap = buildHeaderColMap_(caseSh);
+  var headSh = ss.getSheetByName(SHEETS.header);
+  var headMap = buildHeaderColMap_(headSh);
+
+  var reasons = [];  // 要確認理由を蓄積
+
+  // --- 患者×月 上限チェック ---
+  var monthKey = fmt_(treatDate, "yyyy-MM");
+  var monthlyStatus = getMonthlyBilledStatus_(headSh, headMap, patientId, monthKey, visitKey);
+
+  var hasInit = (kubun1 === "初検" || kubun2 === "初検");
+  var hasKoryo = (kubun1 === "再検" || kubun1 === "後療" || kubun2 === "再検" || kubun2 === "後療");
+
+  // --- 初検料 ---
+  var initFee = 0;
+  if (hasInit) {
+    if (monthlyStatus.initBilled) {
+      initFee = 0;
+      reasons.push("同月別ケース初回 初検抑制");
+    } else {
+      initFee = settings.initFee;
+    }
+  }
+
+  // --- 相談支援料（初検料を算定する日のみ） ---
+  var supportFee = 0;
+  if (initFee > 0) {
+    if (monthlyStatus.supportBilled) {
+      supportFee = 0;
+    } else {
+      supportFee = settings.initSupport;
+    }
+  }
+
+  // --- 再検料（当月初検の次回来院日のみ＋月1回上限） ---
+  var reFee = 0;
+  if (hasKoryo && !hasInit) {
+    if (monthlyStatus.reBilled) {
+      reFee = 0;
+    } else {
+      var isNextVisitAfterInit = checkIsNextVisitAfterMonthlyInit_(
+        headSh, headMap, caseSh, caseMap, patientId, monthKey, treatDate
+      );
+      if (isNextVisitAfterInit) {
+        reFee = settings.reFee;
+      }
+    }
+  }
+
+  // --- 後療料（初検日以外に算定、再検日も算定） ---
+  var isInitDay = (initFee > 0);
+  var isSuppressedInit = (hasInit && monthlyStatus.initBilled);
+
+  // --- 部位別明細金額（後療料＋冷温電） ---
+  var calcKoryoOnThisDay = !isInitDay || isSuppressedInit;
+  var effectiveKubun1 = calcKoryoOnThisDay ? (kubun1 === "初検" ? "後療" : kubun1) : kubun1;
+  var effectiveKubun2 = calcKoryoOnThisDay ? (kubun2 === "初検" ? "後療" : kubun2) : kubun2;
+
+  var detail1 = calcCaseDetailAmount_V3_(caseSh, caseMap, visitKey, 1, effectiveKubun1, treatDate, settings, reasons);
+  var detail2 = calcCaseDetailAmount_V3_(caseSh, caseMap, visitKey, 2, effectiveKubun2, treatDate, settings, reasons);
+  var detailSum = detail1.total + detail2.total;
+
+  // --- 来院合計 = 初検料 + 再検料 + 相談支援料 + 明細合計 ---
+  var visitTotal = initFee + reFee + supportFee + detailSum;
+
+  var unit = settings.roundUnit || 1;
+  var windowPay = roundToUnit_V3_(visitTotal * burden, unit);
+  var claimPay = visitTotal - windowPay;
+
+  var needCheck = (reasons.length > 0);
+  var needCheckReason = reasons.join(";");
+
+  return {
+    initFee: initFee,
+    reFee: reFee,
+    supportFee: supportFee,
+    detailSum: detailSum,
+    visitTotal: visitTotal,
+    windowPay: windowPay,
+    claimPay: claimPay,
+    needCheck: needCheck,
+    needCheckReason: needCheckReason,
+    details: { case1Parts: detail1.parts, case2Parts: detail2.parts }
+  };
+}
+
+/** 当月の既算定状況を来院ヘッダから取得（自分自身のvisitKeyは除外） */
+function getMonthlyBilledStatus_(headSh, headMap, patientId, monthKey, excludeVisitKey) {
+  var result = { initBilled: false, reBilled: false, supportBilled: false, initDate: null };
+  var lastRow = headSh.getLastRow();
+  if (lastRow < 2) return result;
+
+  var n = lastRow - 1;
+  var cPid  = headMap[HEADER_COLS.patientId];
+  var cDt   = headMap[HEADER_COLS.treatDate];
+  var cVk   = headMap[HEADER_COLS.visitKey];
+  var cInit = headMap[HEADER_COLS.initFee];
+  var cRe   = headMap[HEADER_COLS.reFee];
+  var cSup  = headMap[HEADER_COLS.supportFee];
+  if (!cPid || !cDt || !cVk || !cInit || !cRe || !cSup) return result;
+
+  var pidVals  = headSh.getRange(2, cPid, n, 1).getValues().flat();
+  var dtVals   = headSh.getRange(2, cDt,  n, 1).getValues().flat();
+  var vkVals   = headSh.getRange(2, cVk,  n, 1).getValues().flat();
+  var initVals = headSh.getRange(2, cInit, n, 1).getValues().flat();
+  var reVals   = headSh.getRange(2, cRe,   n, 1).getValues().flat();
+  var supVals  = headSh.getRange(2, cSup,  n, 1).getValues().flat();
+
+  for (var i = 0; i < n; i++) {
+    if (String(pidVals[i] || "").trim() !== patientId) continue;
+    var d = dtVals[i];
+    if (!(d instanceof Date)) continue;
+    if (fmt_(d, "yyyy-MM") !== monthKey) continue;
+    if (String(vkVals[i] || "").trim() === excludeVisitKey) continue;
+
+    var iv = Number(initVals[i] || 0);
+    var rv = Number(reVals[i] || 0);
+    var sv = Number(supVals[i] || 0);
+
+    if (iv > 0) {
+      result.initBilled = true;
+      result.initDate = d;
+    }
+    if (rv > 0) result.reBilled = true;
+    if (sv > 0) result.supportBilled = true;
+  }
+  return result;
+}
+
+/** 当月初検の次回来院日かどうか判定 */
+function checkIsNextVisitAfterMonthlyInit_(headSh, headMap, caseSh, caseMap, patientId, monthKey, treatDate) {
+  // 当月の初検日を探す
+  var lastRow = headSh.getLastRow();
+  if (lastRow < 2) return false;
+
+  var n = lastRow - 1;
+  var cPid  = headMap[HEADER_COLS.patientId];
+  var cDt   = headMap[HEADER_COLS.treatDate];
+  var cInit = headMap[HEADER_COLS.initFee];
+  if (!cPid || !cDt || !cInit) return false;
+
+  var pidVals  = headSh.getRange(2, cPid, n, 1).getValues().flat();
+  var dtVals   = headSh.getRange(2, cDt,  n, 1).getValues().flat();
+  var initVals = headSh.getRange(2, cInit, n, 1).getValues().flat();
+
+  var initDate = null;
+  for (var i = 0; i < n; i++) {
+    if (String(pidVals[i] || "").trim() !== patientId) continue;
+    var d = dtVals[i];
+    if (!(d instanceof Date)) continue;
+    if (fmt_(d, "yyyy-MM") !== monthKey) continue;
+    if (Number(initVals[i] || 0) > 0) {
+      initDate = d;
+      break;  // 当月最初の初検日
+    }
+  }
+  if (!initDate) return false;
+
+  // 当月の初検日以降の来院日を収集（初検日自体は除く）
+  var visitDates = getPatientVisitDatesFromCases_(caseSh, caseMap, patientId);
+  var afterInitDates = visitDates.filter(function(d) {
+    return d.getTime() > initDate.getTime() && fmt_(d, "yyyy-MM") === monthKey;
+  }).sort(function(a, b) { return a.getTime() - b.getTime(); });
+
+  if (!afterInitDates.length) return false;
+
+  // 次回来院日 = 初検日の直後の来院日
+  var nextVisitDate = afterInitDates[0];
+  return sameDateKey_(nextVisitDate) === sameDateKey_(treatDate);
+}
+
+/** 1ケース分の明細金額を来院ケースの部位データから算定（SPEC準拠版）
+ *  @return {{ total: number, parts: Object[] }} 合計と部位別内訳配列
+ */
+function calcCaseDetailAmount_V3_(caseSh, caseMap, visitKey, caseNo, kubun, treatDate, settings, reasons) {
+  // 来院ケース行は visitKey + caseNo で検索
+  var rowIndex = findCaseRowByVisitKeyAndCaseNo_(caseSh, caseMap, visitKey, caseNo);
+  if (rowIndex === 0) return { total: 0, parts: [] };
+
+  var row = caseSh.getRange(rowIndex, 1, 1, caseSh.getLastColumn()).getValues()[0];
+  var get = function(name) { return row[caseMap[name] - 1]; };
+
+  var total = 0;
+  var partCount = 0;
+  var parts = [];
+
+  // 部位1
+  var p1 = String(get(CASE_COLS.p1) || "").trim();
+  var d1 = String(get(CASE_COLS.d1) || "").trim();
+  var inj1 = get(CASE_COLS.inj1);
+  if (p1 || d1 || (inj1 instanceof Date)) {
+    partCount++;
+    var part1 = calcOnePartAmount_V3_(settings, kubun, d1, inj1, treatDate,
+      get(CASE_COLS.cold1) === true,
+      get(CASE_COLS.warm1) === true,
+      get(CASE_COLS.elec1) === true,
+      partCount, reasons, p1);
+    part1.bui = p1;
+    total += part1.total;
+    parts.push(part1);
+  }
+
+  // 部位2
+  var p2 = String(get(CASE_COLS.p2) || "").trim();
+  var d2 = String(get(CASE_COLS.d2) || "").trim();
+  var inj2 = get(CASE_COLS.inj2);
+  if (p2 || d2 || (inj2 instanceof Date)) {
+    partCount++;
+    var part2 = calcOnePartAmount_V3_(settings, kubun, d2, inj2, treatDate,
+      get(CASE_COLS.cold2) === true,
+      get(CASE_COLS.warm2) === true,
+      get(CASE_COLS.elec2) === true,
+      partCount, reasons, p2);
+    part2.bui = p2;
+    total += part2.total;
+    parts.push(part2);
+  }
+
+  return { total: total, parts: parts };
 }
 
 /**
