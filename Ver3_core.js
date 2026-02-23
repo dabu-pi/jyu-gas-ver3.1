@@ -173,6 +173,29 @@ function onEdit(e) {
     if (sh.getName() !== SHEETS.ui) return;
 
     var a1 = e.range.getA1Notation();
+
+    // ---- 近接部位チェック（部位名/傷病名セル編集時） ----
+    var PROXIMITY_CELLS = {
+      "A12": 1, "B12": 1, "A13": 1, "B13": 1,
+      "A27": 2, "B27": 2, "A28": 2, "B28": 2
+    };
+    if (PROXIMITY_CELLS[a1] != null) {
+      var caseNo = PROXIMITY_CELLS[a1];
+      var rows = (caseNo === 1) ? UI.case1_rows : UI.case2_rows;
+      var line1 = readRowNewUI_(sh, rows[0]);
+      var line2 = readRowNewUI_(sh, rows[1]);
+      var prox = checkProximityParts_V3_(line1.part, line1.disease, line2.part, line2.disease);
+      if (prox.isProximity) {
+        SpreadsheetApp.getActive().toast(
+          "⚠ " + prox.reason + "\n部位または傷病名を修正してください。",
+          "近接部位の警告",
+          8
+        );
+      }
+      return;
+    }
+
+    // ---- 患者ID / 来院日の変更 → 履歴更新 ----
     if (a1 !== UI.patientId && a1 !== UI.treatDate) return;
 
     var lock = LockService.getScriptLock();
@@ -472,6 +495,30 @@ function saveVisit_V3() {
       "同日二重登録禁止：来院ヘッダに同一visitKeyが存在します。\n" +
       "visitKey: " + visitKey + "（行 " + existingHeaderRow + "）\n" +
       "修正は別機能で行ってください。"
+    );
+  }
+
+  // ★近接部位チェック（§18 — 近接部位があれば保存ブロック）
+  var proxErrors = [];
+  var caseRows = [
+    { no: 1, rows: UI.case1_rows },
+    { no: 2, rows: UI.case2_rows }
+  ];
+  for (var ci = 0; ci < caseRows.length; ci++) {
+    var cr = caseRows[ci];
+    var ln1 = readRowNewUI_(uiSh, cr.rows[0]);
+    var ln2 = readRowNewUI_(uiSh, cr.rows[1]);
+    if (ln1.hasCore && ln2.hasCore) {
+      var prox = checkProximityParts_V3_(ln1.part, ln1.disease, ln2.part, ln2.disease);
+      if (prox.isProximity) {
+        proxErrors.push("ケース" + cr.no + ": " + prox.reason);
+      }
+    }
+  }
+  if (proxErrors.length > 0) {
+    throw new Error(
+      "近接部位が検出されたため保存できません。\n部位または傷病名を修正してください。\n\n" +
+      proxErrors.join("\n")
     );
   }
 
@@ -1839,6 +1886,135 @@ function partExists_(src, idx) {
   if (!src) return false;
   if (idx === 1) return !!(String(src.p1||"").trim() || String(src.d1||"").trim() || (src.inj1 instanceof Date));
   return !!(String(src.p2||"").trim() || String(src.d2||"").trim() || (src.inj2 instanceof Date));
+}
+
+/* =====================================================
+   checkProximityParts_V3_（近接部位チェック — §18）
+   同一ケース内の部位1と部位2の組み合わせで近接部位を判定。
+   戻り値: { isProximity: boolean, reason: string }
+   ===================================================== */
+function checkProximityParts_V3_(bui1, disease1, bui2, disease2) {
+  var result = { isProximity: false, reason: "" };
+  if (!bui1 || !disease1 || !bui2 || !disease2) return result;
+
+  var type1 = detectInjuryType_V3_(disease1);
+  var type2 = detectInjuryType_V3_(disease2);
+  if (!type1 || !type2) return result;
+
+  // ---- (a) 骨折 + 捻挫（関節近接） ----
+  // 骨折部位の近接関節に捻挫がある場合
+  var KOSSETU_NENZA_MAP = [
+    { kossetuKw: ["鎖骨"],           nenzaKw: ["肩"] },
+    { kossetuKw: ["上腕"],           nenzaKw: ["肩", "肘"] },
+    { kossetuKw: ["前腕", "橈骨", "尺骨"], nenzaKw: ["肘", "手関節", "手首"] },
+    { kossetuKw: ["指", "中手骨"],    nenzaKw: ["手関節", "手首", "指"] },
+    { kossetuKw: ["大腿"],           nenzaKw: ["股", "膝"] },
+    { kossetuKw: ["下腿", "脛骨", "腓骨"], nenzaKw: ["膝", "足関節", "足首"] },
+    { kossetuKw: ["趾", "中足骨"],    nenzaKw: ["足関節", "足首", "趾"] },
+    { kossetuKw: ["肋骨"],           nenzaKw: ["胸", "背"] },
+  ];
+
+  var fracSide = null, sprainSide = null, fracBui = null, sprainBui = null;
+  if ((type1 === "骨折" || type1 === "不全骨折") && type2 === "捻挫") {
+    fracSide = 1; sprainSide = 2; fracBui = bui1; sprainBui = bui2;
+  } else if ((type2 === "骨折" || type2 === "不全骨折") && type1 === "捻挫") {
+    fracSide = 2; sprainSide = 1; fracBui = bui2; sprainBui = bui1;
+  }
+  if (fracSide !== null) {
+    for (var i = 0; i < KOSSETU_NENZA_MAP.length; i++) {
+      var rule = KOSSETU_NENZA_MAP[i];
+      var fracMatch = false, sprainMatch = false;
+      for (var j = 0; j < rule.kossetuKw.length; j++) {
+        if (fracBui.indexOf(rule.kossetuKw[j]) !== -1) { fracMatch = true; break; }
+      }
+      if (!fracMatch) continue;
+      for (var k = 0; k < rule.nenzaKw.length; k++) {
+        if (sprainBui.indexOf(rule.nenzaKw[k]) !== -1) { sprainMatch = true; break; }
+      }
+      if (sprainMatch) {
+        result.isProximity = true;
+        result.reason = "近接部位（§18）: " + fracBui + "の骨折と" + sprainBui + "の捻挫は同時算定不可（骨折のみ算定）";
+        return result;
+      }
+    }
+  }
+
+  // ---- (b) 捻挫(頸/腰/肩) + 打撲/挫傷(背部) ----
+  var nSide = null, dSide = null, nBui = null, dBui = null, nType = null, dType = null;
+  if (type1 === "捻挫" && (type2 === "打撲" || type2 === "挫傷")) {
+    nSide = 1; dSide = 2; nBui = bui1; dBui = bui2; nType = type1; dType = type2;
+  } else if (type2 === "捻挫" && (type1 === "打撲" || type1 === "挫傷")) {
+    nSide = 2; dSide = 1; nBui = bui2; dBui = bui1; nType = type2; dType = type1;
+  }
+  if (nSide !== null) {
+    var nIsKeibu = nBui.indexOf("頸") !== -1 || nBui.indexOf("頚") !== -1;
+    var nIsYobu = nBui.indexOf("腰") !== -1;
+    var nIsKata = nBui.indexOf("肩") !== -1;
+    var dIsSenaka = dBui.indexOf("背") !== -1 || dBui.indexOf("肩") !== -1;
+
+    if ((nIsKeibu || nIsYobu || nIsKata) && dIsSenaka) {
+      result.isProximity = true;
+      result.reason = "近接部位（§18）: " + nBui + "の捻挫と" + dBui + "の" + dType + "は同時算定不可（捻挫のみ算定）";
+      return result;
+    }
+
+    // ---- (d) 捻挫 + 打撲の上下2関節 ----
+    var NENZA_DABOKU_MAP = [
+      { nenzaKw: ["手関節", "手首"], dabokuKw: ["前腕"] },
+      { nenzaKw: ["肘"],           dabokuKw: ["前腕", "上腕"] },
+      { nenzaKw: ["肩"],           dabokuKw: ["上腕"] },
+      { nenzaKw: ["足関節", "足首"], dabokuKw: ["下腿"] },
+      { nenzaKw: ["膝"],           dabokuKw: ["下腿", "大腿"] },
+      { nenzaKw: ["股"],           dabokuKw: ["大腿"] },
+    ];
+
+    if (dType === "打撲") {
+      for (var m = 0; m < NENZA_DABOKU_MAP.length; m++) {
+        var rule2 = NENZA_DABOKU_MAP[m];
+        var nMatch = false, dMatch = false;
+        for (var n = 0; n < rule2.nenzaKw.length; n++) {
+          if (nBui.indexOf(rule2.nenzaKw[n]) !== -1) { nMatch = true; break; }
+        }
+        if (!nMatch) continue;
+        for (var p = 0; p < rule2.dabokuKw.length; p++) {
+          if (dBui.indexOf(rule2.dabokuKw[p]) !== -1) { dMatch = true; break; }
+        }
+        if (dMatch) {
+          result.isProximity = true;
+          result.reason = "近接部位（§18）: " + nBui + "の捻挫と" + dBui + "の打撲は同時算定不可（捻挫のみ算定）";
+          return result;
+        }
+      }
+    }
+  }
+
+  // ---- (c) 指趾の骨折/脱臼 + 同部位の下位負傷 ----
+  var YUBI_TYPES_HIGH = ["骨折", "脱臼"];
+  var YUBI_TYPES_LOW = ["不全骨折", "捻挫", "打撲"];
+  var YUBI_KW = ["指", "趾", "中手骨", "中足骨", "基節骨", "末節骨"];
+
+  var highSide = null, lowSide = null, highBui = null, lowBui = null;
+  if (YUBI_TYPES_HIGH.indexOf(type1) !== -1 && YUBI_TYPES_LOW.indexOf(type2) !== -1) {
+    highSide = 1; lowSide = 2; highBui = bui1; lowBui = bui2;
+  } else if (YUBI_TYPES_HIGH.indexOf(type2) !== -1 && YUBI_TYPES_LOW.indexOf(type1) !== -1) {
+    highSide = 2; lowSide = 1; highBui = bui2; lowBui = bui1;
+  }
+  if (highSide !== null) {
+    var highIsYubi = false, lowIsYubi = false;
+    for (var q = 0; q < YUBI_KW.length; q++) {
+      if (highBui.indexOf(YUBI_KW[q]) !== -1) highIsYubi = true;
+      if (lowBui.indexOf(YUBI_KW[q]) !== -1) lowIsYubi = true;
+    }
+    if (highIsYubi && lowIsYubi) {
+      var highType = (highSide === 1) ? type1 : type2;
+      var lowType = (lowSide === 1) ? type1 : type2;
+      result.isProximity = true;
+      result.reason = "近接部位（§18）: " + highBui + "の" + highType + "と" + lowBui + "の" + lowType + "は同時算定不可（" + highType + "のみ算定）";
+      return result;
+    }
+  }
+
+  return result;
 }
 
 /* =====================================================
