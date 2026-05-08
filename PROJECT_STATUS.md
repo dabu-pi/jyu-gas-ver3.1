@@ -1,6 +1,6 @@
 # JREC-01 柔整保険申請書 Ver3.1 — プロジェクトステータス
 
-最終更新: 2026-05-08 (WEB-4A〜4D 本番 deploy 完了 @12)  
+最終更新: 2026-05-08 (WEB-5: 本番フロー一周確認 — 全フロー OK / 申請書生成 OK)  
 担当: dabu-pi  
 ブランチ: `feature/auto-dev-phase3-loop`
 
@@ -47,6 +47,14 @@ npx tsx tools/live-check-runner/scripts/check-exec-home.ts
 ```
 
 ### 次のアクション
+
+**→ WEB-5 本番フロー一周確認完了（2026-05-08）** ★  
+  - 本番 @12 全フロー確認済み（自動スクリプト）  
+  - 月次一覧: 9名 / hirayamaka 確認  
+  - Step1後: ¥4,363 / ¥1,310 / ¥3,053（転記データ）✅  
+  - B案実生成: `申請書_hirayamaka_2026-04_151333.xlsx` ✅  
+  - APPGEN_SECRET 露出なし ✅ / A案PDF未使用 ✅  
+  - 残課題: 一覧側金額は来院ヘッダ値（5円差）→ 次フェーズ候補
 
 **→ WEB-4A〜4D 本番 deploy 完了（2026-05-08）** ★  
   - deployment: @12 / deploymentId: `AKfycbxODNWJNcCJVQnDXHzzWck237hnUIIXR_Ilt8SS5P5zodfF2dnmKeqso8BL8hcinVEBrQ`  
