@@ -1,6 +1,6 @@
 # JREC-01 柔整保険申請書 Ver3.1 — プロジェクトステータス
 
-最終更新: 2026-05-08 (WEB-4D: tfoot合計行更新バグ修正 — cells.length >= 6 → >= 4)  
+最終更新: 2026-05-08 (WEB-4D LiveCheck 全 PASS 確認済み — 本番 deploy 判断待ち)  
 担当: dabu-pi  
 ブランチ: `feature/auto-dev-phase3-loop`
 
@@ -48,11 +48,12 @@ npx tsx tools/live-check-runner/scripts/check-exec-home.ts
 
 ### 次のアクション
 
-**→ WEB-4D 修正完了（2026-05-08）** — tfoot合計行更新バグ修正  
+**→ WEB-4D 最終確認完了（2026-05-08）** — tfoot合計行更新バグ修正・LiveCheck全PASS  
   - 原因: `cells.length >= 6` チェックが誤り（実際は5）→ tfoot が更新されず  
   - 修正: `>= 4` に変更 + テーブル下部に「合計行は確定額」注記を追加  
   - 修正後: Step1実行後にKPI・tfoot・注記がすべて転記データ金額（¥4,363/¥1,310/¥3,053）で統一  
-  - LiveCheck W4D-1〜5（auth更新後 PASS 見込み）/ clasp push 済
+  - LiveCheck W4D-1〜5 **5 PASS** / W4C-1〜5 **5 PASS** / W4A-1〜5 **5 PASS** / web3 **8 PASS**  
+  - clasp push 済 / **本番 deploy 判断待ち**
 
 **→ WEB-4C 修正完了（2026-05-08）** — Web月次集計とB案申請書の金額整合  
   - 原因: 来院ヘッダの per-visit 候補金額合算 vs `V3TR_buildTransferDataForMonth_` 月合計再計算の丸め差（5円）  
