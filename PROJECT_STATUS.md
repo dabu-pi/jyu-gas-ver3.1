@@ -1,6 +1,6 @@
 # JREC-01 柔整保険申請書 Ver3.1 — プロジェクトステータス
 
-最終更新: 2026-05-08 (WEB-4A: Web UI から B案 Cloud Run Excel 申請書生成入口を追加)  
+最終更新: 2026-05-08 (WEB-4B: 月次申請集計0円バグ修正 — buildHeaderColMap_ off-by-one)  
 担当: dabu-pi  
 ブランチ: `feature/auto-dev-phase3-loop`
 
@@ -8,7 +8,7 @@
 
 ## 現在の状態
 
-**稼働中 + WEB-1〜WEB-4A 実装完了 + デフォルト URL = page=home**
+**稼働中 + WEB-1〜WEB-4B 実装完了 + デフォルト URL = page=home**
 
 スプレッドシート運用は継続中。  
 Web UI から来院記録の登録・候補金額算定まで実装済み（needCheck=TRUE / 要確認）。  
@@ -47,6 +47,12 @@ npx tsx tools/live-check-runner/scripts/check-exec-home.ts
 ```
 
 ### 次のアクション
+
+**→ WEB-4B 修正完了（2026-05-08）** — 月次申請集計0円バグ修正  
+  - 原因: `getMonthlyClaimList_V3` / `getMonthlyClaimDetail_V3` で `buildHeaderColMap_`（1始まり）を配列インデックス（0始まり）として使用 → 列ズレ → 全行スキップ → 集計0  
+  - 修正: 両関数を `V3TR_buildHeaderMap_`（0始まり）に変更  
+  - 修正後: 来院数2 / ¥4,368 / ¥1,310 / ¥3,058 を正しく表示  
+  - LiveCheck W4B-1〜5 全 PASS / B案ルート変更なし / clasp push 済
 
 **→ WEB-4A 実機確認完了（2026-05-08）** — Web UI から B案 Cloud Run Excel 申請書生成入口を確認  
   - `generateClaimApplicationBFromWeb_V3(patientId, ym)` 追加（Ver3_transferData.js）
@@ -159,6 +165,7 @@ APPGEN_SECRET を Web/JS に出さないこと。既存B案ロジックを壊さ
 | WEB-3 | 月次申請フロー（一覧・詳細・転記データ生成） | ✅ 完了（LiveCheck 8 PASS / 2026-05-07） |
 | WEB-3.4 | 申請書 PDF 生成（A案：テンプレ書込 + Drive PDF） | ✅ 完了（LiveCheck 9 PASS / 1 SKIP / 2026-05-07） |
 | WEB-4A | Web UI から B案 Cloud Run Excel 申請書生成入口 | ✅ 完了（clasp push 済 / 2026-05-08） |
+| WEB-4B | 月次申請集計0円バグ修正（buildHeaderColMap_ off-by-one） | ✅ 完了（clasp push 済 / 2026-05-08） |
 
 ---
 

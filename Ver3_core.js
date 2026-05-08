@@ -6536,7 +6536,8 @@ function getMonthlyClaimList_V3(ym) {
     }
 
     // 来院ヘッダから月内の保険来院を患者別に集計
-    var headMap = buildHeaderColMap_(headSh);
+    // V3TR_buildHeaderMap_ を使用（0始まりインデックスで配列アクセスと一致）
+    var headMap = V3TR_buildHeaderMap_(headSh);
     var hPidC   = headMap[HEADER_COLS.patientId];
     var hDtC    = headMap[HEADER_COLS.treatDate];
     var hVtC    = headMap[HEADER_COLS.visitTotal];
@@ -6638,8 +6639,9 @@ function getMonthlyClaimDetail_V3(patientId, ym) {
     }
 
     // 月範囲・来院ヘッダ列マップ
+    // V3TR_buildHeaderMap_ を使用（0始まりインデックスで配列アクセスと一致）
     var month   = V3TR_parseYM_(ymStr);
-    var headMap = buildHeaderColMap_(headSh);
+    var headMap = V3TR_buildHeaderMap_(headSh);
     var hPidC   = headMap[HEADER_COLS.patientId];
     var hDtC    = headMap[HEADER_COLS.treatDate];
     var hVkC    = headMap[HEADER_COLS.visitKey];
