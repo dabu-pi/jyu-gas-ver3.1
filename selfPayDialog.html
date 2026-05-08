@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>自費明細入力</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: "Hiragino Sans", "Meiryo", sans-serif;
+      font-size: 13px;
+      margin: 0;
+      padding: 12px;
+      color: #333;
+      background: #fff;
+    }
+    h3 {
+      margin: 0 0 8px;
+      font-size: 14px;
+      color: #1a73e8;
+    }
+    #visitKeyLabel {
+      font-size: 12px;
+      color: #666;
+      margin-bottom: 10px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 8px;
+    }
+    th {
+      background: #e8f0fe;
+      padding: 5px 6px;
+      font-weight: bold;
+      text-align: center;
+      border: 1px solid #c5cae9;
+      font-size: 12px;
+    }
+    td {
+      padding: 4px 5px;
+      border: 1px solid #e0e0e0;
+      vertical-align: middle;
+    }
+    td.no-col { text-align: center; width: 28px; color: #888; }
+    select.menu-select {
+      width: 100%;
+      padding: 3px 4px;
+      border: 1px solid #ccc;
+      border-radius: 3px;
+      font-size: 12px;
+    }
+    input[type="number"] {
+      width: 100%;
+      padding: 3px 4px;
+      border: 1px solid #ccc;
+      border-radius: 3px;
+      font-size: 12px;
+      text-align: right;
+    }
+    .subtotal-cell {
+      text-align: right;
+      font-weight: bold;
+      min-width: 60px;
+      padding-right: 6px;
+      background: #f9f9f9;
+    }
+    .delete-btn {
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: #c00;
+      font-size: 14px;
+      padding: 2px 4px;
+    }
+    #add-row-btn {
+      background: #e8f0fe;
+      border: 1px solid #1a73e8;
+      color: #1a73e8;
+      padding: 5px 14px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 12px;
+      margin-bottom: 10px;
+    }
+    #add-row-btn:hover { background: #d2e3fc; }
+    #total-area {
+      text-align: right;
+      font-size: 14px;
+      font-weight: bold;
+      margin: 4px 0 12px;
+      color: #333;
+    }
+    .footer-btns {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+    }
+    .btn-cancel {
+      background: #f1f3f4;
+      border: 1px solid #ccc;
+      padding: 6px 16px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 13px;
+    }
+    .btn-save {
+      background: #1a73e8;
+      color: #fff;
+      border: none;
+      padding: 6px 16px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 13px;
+    }
+    .btn-save:hover { background: #1558b0; }
+    .btn-save:disabled { background: #aaa; cursor: not-allowed; }
+    #status-msg {
+      font-size: 12px;
+      color: #c00;
+      margin-bottom: 6px;
+      min-height: 16px;
+    }
+    #loading { color: #666; font-size: 12px; }
+    #prev-reload-notice {
+      display: none;
+      background: #e6f4ea;
+      color: #137333;
+      border: 1px solid #34a853;
+      border-radius: 4px;
+      font-size: 11px;
+      padding: 3px 8px;
+      margin-bottom: 6px;
+    }
+    #gymMemberBadge {
+      display: none;
+      background: #e6f4ea;
+      color: #137333;
+      border: 1px solid #34a853;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: bold;
+      padding: 2px 8px;
+      margin-bottom: 8px;
+    }
+  </style>
+</head>
+<body>
+  <h3>自費明細入力</h3>
+  <div id="visitKeyLabel">読み込み中...</div>
+  <div id="gymMemberBadge">🏋 ジム会員料金 適用中</div>
+  <div id="loading">価格マスタを読み込んでいます...</div>
+  <div id="main-content" style="display:none;">
+    <table id="detail-table">
+      <thead>
+        <tr>
+          <th class="no-col">#</th>
+          <th style="width:45%;">メニュー名</th>
+          <th style="width:16%;">単価</th>
+          <th style="width:12%;">数量</th>
+          <th style="width:16%;">小計</th>
+          <th style="width:32px;"></th>
+        </tr>
+      </thead>
+      <tbody id="detail-tbody"></tbody>
+    </table>
+    <button id="add-row-btn" onclick="addRow()">+ 行追加</button>
+    <div id="total-area">合計: ¥ <span id="total-value">0</span></div>
+    <div id="prev-reload-notice"></div>
+    <div id="status-msg"></div>
+    <div class="footer-btns">
+      <button class="btn-cancel" onclick="google.script.host.close()">キャンセル</button>
+      <button class="btn-save" id="save-btn" onclick="doSave()">保存して閉じる</button>
+    </div>
+  </div>
+
+  <script>
+    var menuMaster = [];
+    var visitKeyInfo = null;
+
+    // 初期化: visitKey とマスタを並行取得
+    google.script.run
+      .withSuccessHandler(function(info) {
+        // ★ サーバー側が error フィールドを返した場合はエラー表示で停止
+        if (info && info.error) {
+          document.getElementById('visitKeyLabel').textContent = '読み込みエラー: ' + info.error;
+          document.getElementById('loading').textContent = 'エラーが発生しました。ダイアログを閉じて再試行してください。';
+          return;
+        }
+        visitKeyInfo = info;
+        document.getElementById('visitKeyLabel').textContent =
+          '来院キー: ' + (info.visitKey || '---') + ' / ' + (info.treatDate || '');
+        // Phase B: ジム会員フラグに応じてバッジ表示
+        if (info.isGymMember) {
+          document.getElementById('gymMemberBadge').style.display = 'inline-block';
+        }
+        loadMenuMaster();
+      })
+      .withFailureHandler(function(e) {
+        document.getElementById('visitKeyLabel').textContent = '接続エラー: ' + e.message;
+        document.getElementById('loading').textContent = 'エラーが発生しました。ダイアログを閉じて再試行してください。';
+      })
+      .getCurrentVisitKey_V3();
+
+    function loadMenuMaster() {
+      google.script.run
+        .withSuccessHandler(function(master) {
+          menuMaster = master || [];
+          // 前回明細スロットを確認してからUIを構築
+          google.script.run
+            .withSuccessHandler(function(prevItems) {
+              document.getElementById('loading').style.display = 'none';
+              document.getElementById('main-content').style.display = 'block';
+              if (prevItems && prevItems.length > 0) {
+                prevItems.forEach(function(item) {
+                  addRow(item.menuId, item.menuName, undefined, item.qty);
+                });
+                var notice = document.getElementById('prev-reload-notice');
+                notice.textContent = '前回来院の自費明細 ' + prevItems.length + ' 件を引き継ぎました。内容を確認してください。';
+                notice.style.display = 'block';
+              } else if (visitKeyInfo && visitKeyInfo.existItems && visitKeyInfo.existItems.length > 0) {
+                visitKeyInfo.existItems.forEach(function(item) {
+                  addRow(item.menuId, item.menuName, item.unitPrice, item.qty);
+                });
+              } else {
+                addRow();
+              }
+              updateTotal();
+            })
+            .withFailureHandler(function() {
+              // 前回明細取得失敗時は従来通り動作
+              document.getElementById('loading').style.display = 'none';
+              document.getElementById('main-content').style.display = 'block';
+              if (visitKeyInfo && visitKeyInfo.existItems && visitKeyInfo.existItems.length > 0) {
+                visitKeyInfo.existItems.forEach(function(item) {
+                  addRow(item.menuId, item.menuName, item.unitPrice, item.qty);
+                });
+              } else {
+                addRow();
+              }
+              updateTotal();
+            })
+            .getAndClearPrevSelfPayItems_V3();
+        })
+        .withFailureHandler(function(e) {
+          document.getElementById('loading').textContent = 'マスタ読み込みエラー: ' + e.message;
+          document.getElementById('loading').style.display = 'block';
+        })
+        .getSelfPayMenuMaster_V3();
+    }
+
+    function addRow(menuId, menuName, unitPrice, qty) {
+      var tbody = document.getElementById('detail-tbody');
+      var rowNo = tbody.rows.length + 1;
+      var tr = document.createElement('tr');
+
+      // # 列
+      var tdNo = document.createElement('td');
+      tdNo.className = 'no-col';
+      tdNo.textContent = rowNo;
+      tr.appendChild(tdNo);
+
+      // メニュー名プルダウン
+      var tdMenu = document.createElement('td');
+      var sel = document.createElement('select');
+      sel.className = 'menu-select';
+      sel.innerHTML = '<option value="">-- 選択 --</option>';
+      menuMaster.forEach(function(m) {
+        var opt = document.createElement('option');
+        opt.value = m.menuId;
+        // Phase B: ジム会員なら H列(memberPrice)、0 or 未設定なら G列(unitPrice) にフォールバック
+        var isGymMember    = visitKeyInfo && visitKeyInfo.isGymMember;
+        var effectivePrice = (isGymMember && m.memberPrice > 0) ? m.memberPrice : m.unitPrice;
+        opt.textContent    = m.menuName + ' (¥' + effectivePrice.toLocaleString() + ')';
+        opt.dataset.price  = effectivePrice;
+        opt.dataset.name   = m.menuName;
+        if (m.menuId === menuId) opt.selected = true;
+        sel.appendChild(opt);
+      });
+      // 既存データでマスタに存在しないメニュー名の場合
+      if (menuName && !menuMaster.some(function(m){ return m.menuId === menuId; })) {
+        var opt2 = document.createElement('option');
+        opt2.value = menuId || '';
+        opt2.textContent = menuName + ' (手入力)';
+        opt2.dataset.price = unitPrice || 0;
+        opt2.dataset.name  = menuName;
+        opt2.selected = true;
+        sel.appendChild(opt2);
+      }
+      sel.onchange = function() {
+        var chosen = sel.options[sel.selectedIndex];
+        if (chosen && chosen.dataset.price) {
+          tr.querySelector('.price-input').value = chosen.dataset.price;
+        }
+        updateSubtotal(tr);
+        updateTotal();
+      };
+      tdMenu.appendChild(sel);
+      tr.appendChild(tdMenu);
+
+      // 単価
+      var tdPrice = document.createElement('td');
+      var priceInput = document.createElement('input');
+      priceInput.type = 'number';
+      priceInput.className = 'price-input';
+      priceInput.min = '0';
+      priceInput.value = unitPrice !== undefined ? unitPrice : (sel.options[sel.selectedIndex] ? (sel.options[sel.selectedIndex].dataset.price || 0) : 0);
+      priceInput.oninput = function() { updateSubtotal(tr); updateTotal(); };
+      tdPrice.appendChild(priceInput);
+      tr.appendChild(tdPrice);
+
+      // 数量
+      var tdQty = document.createElement('td');
+      var qtyInput = document.createElement('input');
+      qtyInput.type = 'number';
+      qtyInput.className = 'qty-input';
+      qtyInput.min = '1';
+      qtyInput.value = qty !== undefined ? qty : 1;
+      qtyInput.oninput = function() { updateSubtotal(tr); updateTotal(); };
+      tdQty.appendChild(qtyInput);
+      tr.appendChild(tdQty);
+
+      // 小計
+      var tdSub = document.createElement('td');
+      tdSub.className = 'subtotal-cell';
+      tdSub.innerHTML = '¥ <span class="subtotal-val">0</span>';
+      tr.appendChild(tdSub);
+
+      // 削除ボタン
+      var tdDel = document.createElement('td');
+      var delBtn = document.createElement('button');
+      delBtn.className = 'delete-btn';
+      delBtn.textContent = '✕';
+      delBtn.title = '削除';
+      delBtn.onclick = function() {
+        tbody.removeChild(tr);
+        renumberRows();
+        updateTotal();
+      };
+      tdDel.appendChild(delBtn);
+      tr.appendChild(tdDel);
+
+      tbody.appendChild(tr);
+      updateSubtotal(tr);
+    }
+
+    function updateSubtotal(tr) {
+      var price = parseFloat(tr.querySelector('.price-input').value) || 0;
+      var qty   = parseFloat(tr.querySelector('.qty-input').value)   || 1;
+      var sub   = price * qty;
+      tr.querySelector('.subtotal-val').textContent = sub.toLocaleString();
+    }
+
+    function updateTotal() {
+      var rows = document.querySelectorAll('#detail-tbody tr');
+      var total = 0;
+      rows.forEach(function(tr) {
+        var price = parseFloat(tr.querySelector('.price-input').value) || 0;
+        var qty   = parseFloat(tr.querySelector('.qty-input').value)   || 1;
+        total += price * qty;
+      });
+      document.getElementById('total-value').textContent = total.toLocaleString();
+    }
+
+    function renumberRows() {
+      var rows = document.querySelectorAll('#detail-tbody tr');
+      rows.forEach(function(tr, idx) {
+        tr.querySelector('.no-col').textContent = idx + 1;
+      });
+    }
+
+    function doSave() {
+      var saveBtn = document.getElementById('save-btn');
+      var statusMsg = document.getElementById('status-msg');
+      statusMsg.textContent = '';
+
+      // バリデーション
+      var rows = document.querySelectorAll('#detail-tbody tr');
+      var items = [];
+      var hasError = false;
+      rows.forEach(function(tr) {
+        var sel   = tr.querySelector('.menu-select');
+        var price = parseFloat(tr.querySelector('.price-input').value) || 0;
+        var qty   = parseFloat(tr.querySelector('.qty-input').value)   || 1;
+        var chosen = sel.options[sel.selectedIndex];
+        var menuId   = sel.value || '';
+        var menuName = (chosen && chosen.dataset.name) ? chosen.dataset.name : sel.value;
+        if (!menuName || menuName === '-- 選択 --') {
+          hasError = true;
+          return;
+        }
+        items.push({menuId: menuId, menuName: menuName, unitPrice: price, qty: qty});
+      });
+
+      if (hasError) {
+        statusMsg.textContent = 'メニューを選択してください。';
+        return;
+      }
+      // 全件削除保存: confirm で意図確認してから items=[] のまま保存ルートへ進める。
+      // サーバー側 saveSelfPayDetails_V3_ は items=[] を正しく処理できる
+      // （既存行を全削除し D7/F7 クリア・H8="未入力" に戻す）。
+      if (items.length === 0) {
+        if (!window.confirm('自費明細を全件削除します。\nD7/F7 がクリアされ H8 が「未入力」に戻ります。よろしいですか？')) {
+          return;
+        }
+      }
+
+      saveBtn.disabled = true;
+      saveBtn.textContent = '保存中...';
+
+      var visitKey = visitKeyInfo ? visitKeyInfo.visitKey : '';
+      var context  = visitKeyInfo ? {
+        treatDate:       visitKeyInfo.treatDate       || '',
+        patientId:       visitKeyInfo.patientId       || '',
+        accountingType:  visitKeyInfo.accountingType  || '',
+        chronicFlag:     visitKeyInfo.chronicFlag     || false,
+        nextReservation: visitKeyInfo.nextReservation || false,
+      } : {};
+
+      google.script.run
+        .withSuccessHandler(function(result) {
+          if (result === 'OK') {
+            google.script.host.close();
+          } else {
+            statusMsg.textContent = '保存エラー: ' + result;
+            saveBtn.disabled = false;
+            saveBtn.textContent = '保存して閉じる';
+          }
+        })
+        .withFailureHandler(function(e) {
+          statusMsg.textContent = 'エラー: ' + e.message;
+          saveBtn.disabled = false;
+          saveBtn.textContent = '保存して閉じる';
+        })
+        .saveSelfPayDetailsFromDialog_V3(visitKey, JSON.stringify(items), JSON.stringify(context));
+    }
+  </script>
+</body>
+</html>

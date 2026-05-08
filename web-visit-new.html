@@ -1,0 +1,582 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>来院記録 — JREC-01</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: "Hiragino Sans", "Yu Gothic", sans-serif;
+      background: #f5f6fa;
+      color: #222;
+      padding: 16px;
+      font-size: 14px;
+      padding-bottom: 80px;
+    }
+    .back-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 13px;
+      color: #3498db;
+      text-decoration: none;
+      margin-bottom: 14px;
+    }
+    .back-link:hover { text-decoration: underline; }
+    .page-title {
+      font-size: 18px;
+      font-weight: 700;
+      color: #2c3e50;
+      margin-bottom: 4px;
+    }
+    .patient-chip {
+      display: inline-block;
+      background: #e8f4fd;
+      color: #2980b9;
+      font-size: 12px;
+      font-weight: 600;
+      padding: 3px 10px;
+      border-radius: 12px;
+      margin-bottom: 16px;
+    }
+
+    .section {
+      background: #fff;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      padding: 16px;
+      margin-bottom: 14px;
+    }
+    .section-title {
+      font-size: 11px;
+      font-weight: 700;
+      color: #888;
+      text-transform: uppercase;
+      letter-spacing: .05em;
+      margin-bottom: 12px;
+    }
+
+    .form-row {
+      margin-bottom: 12px;
+    }
+    label {
+      display: block;
+      font-size: 12px;
+      font-weight: 600;
+      color: #555;
+      margin-bottom: 4px;
+    }
+    input[type="text"],
+    input[type="date"],
+    select {
+      width: 100%;
+      padding: 10px 12px;
+      font-size: 15px;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      outline: none;
+      color: #222;
+      background: #fff;
+    }
+    input[type="text"]:focus,
+    input[type="date"]:focus,
+    select:focus { border-color: #3498db; }
+
+    .checkbox-group {
+      display: flex;
+      gap: 20px;
+      margin-top: 4px;
+    }
+    .checkbox-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 14px;
+    }
+    .checkbox-item input[type="checkbox"] {
+      width: 18px; height: 18px;
+      cursor: pointer;
+    }
+
+    .btn-inherit {
+      display: block;
+      width: 100%;
+      padding: 10px;
+      background: #fff;
+      color: #6c757d;
+      border: 1px dashed #aaa;
+      border-radius: 6px;
+      font-size: 14px;
+      cursor: pointer;
+      text-align: center;
+      margin-bottom: 12px;
+    }
+    .btn-inherit:hover { background: #f8f9fa; border-color: #6c757d; }
+
+    .footer-bar {
+      position: fixed;
+      bottom: 0; left: 0; right: 0;
+      background: #fff;
+      border-top: 1px solid #ddd;
+      padding: 12px 16px;
+      display: flex;
+      gap: 10px;
+    }
+    .btn-save {
+      flex: 1;
+      padding: 13px;
+      background: #27ae60;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      font-size: 16px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .btn-save:hover    { background: #229954; }
+    .btn-save:disabled { background: #aaa; cursor: default; }
+
+    /* モーダル */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,.45);
+      z-index: 200;
+      justify-content: center;
+      align-items: flex-end;
+    }
+    .modal-overlay.open { display: flex; }
+    .modal-box {
+      background: #fff;
+      border-radius: 16px 16px 0 0;
+      padding: 24px 20px 32px;
+      width: 100%;
+      max-width: 480px;
+      margin: 0 auto;
+    }
+    .modal-title {
+      font-size: 16px;
+      font-weight: 700;
+      color: #2c3e50;
+      margin-bottom: 16px;
+      text-align: center;
+    }
+    .confirm-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+      margin-bottom: 20px;
+    }
+    .confirm-table td {
+      padding: 7px 6px;
+      border-bottom: 1px solid #f0f0f0;
+      vertical-align: top;
+    }
+    .confirm-table td:first-child {
+      color: #888;
+      font-size: 12px;
+      width: 38%;
+      white-space: nowrap;
+    }
+    .confirm-table td:last-child {
+      font-weight: 600;
+    }
+    .warn-box {
+      background: #fff3cd;
+      color: #856404;
+      border: 1px solid #ffc107;
+      border-radius: 6px;
+      padding: 10px 14px;
+      font-size: 12px;
+      margin-bottom: 16px;
+    }
+    .modal-btns { display: flex; gap: 10px; }
+    .btn-cancel {
+      flex: 1;
+      padding: 12px;
+      background: #f8f9fa;
+      color: #555;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      font-size: 15px;
+      cursor: pointer;
+    }
+    .btn-confirm {
+      flex: 2;
+      padding: 12px;
+      background: #27ae60;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      font-size: 15px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .btn-confirm:disabled { background: #aaa; cursor: default; }
+
+    /* 完了表示 */
+    #result-panel {
+      display: none;
+      background: #d4edda;
+      border: 1px solid #27ae60;
+      border-radius: 8px;
+      padding: 20px;
+      text-align: center;
+      margin-bottom: 14px;
+    }
+    #result-panel.error {
+      background: #f8d7da;
+      border-color: #e74c3c;
+    }
+    .result-icon { font-size: 36px; margin-bottom: 8px; }
+    .result-msg  { font-size: 15px; font-weight: 700; color: #155724; margin-bottom: 4px; }
+    #result-panel.error .result-msg { color: #721c24; }
+    .result-sub  { font-size: 13px; color: #555; }
+
+    #loading-overlay {
+      display: none;
+      position: fixed; inset: 0;
+      background: rgba(255,255,255,.7);
+      z-index: 300;
+      justify-content: center;
+      align-items: center;
+      font-size: 16px;
+      color: #555;
+    }
+    #loading-overlay.open { display: flex; }
+  </style>
+</head>
+<body>
+  <a class="back-link" id="back-link" href="#" target="_top">&#8592; 患者詳細に戻る</a>
+  <div class="page-title">来院記録 — 新規登録</div>
+  <div class="patient-chip" id="patient-chip">患者 ID: …</div>
+
+  <div id="result-panel">
+    <div class="result-icon">&#x2705;</div>
+    <div class="result-msg" id="result-msg"></div>
+    <div class="result-sub" id="result-sub"></div>
+  </div>
+
+  <!-- 基本情報 -->
+  <div class="section">
+    <div class="section-title">基本情報</div>
+    <div class="form-row">
+      <label for="visitDate">来院日</label>
+      <input type="date" id="visitDate">
+    </div>
+    <div class="form-row">
+      <label for="accountingType">会計区分</label>
+      <select id="accountingType">
+        <option value="">（選択してください）</option>
+        <option value="保険のみ">保険のみ</option>
+        <option value="保険+自費">保険+自費</option>
+        <option value="自費のみ">自費のみ</option>
+      </select>
+    </div>
+    <div class="form-row">
+      <label>オプション</label>
+      <div class="checkbox-group">
+        <label class="checkbox-item"><input type="checkbox" id="gymMember"> ジム会員</label>
+        <label class="checkbox-item"><input type="checkbox" id="chronicFlag"> 慢性候補</label>
+        <label class="checkbox-item"><input type="checkbox" id="nextReserv"> 次回予約あり</label>
+      </div>
+    </div>
+    <div class="form-row">
+      <label for="firstVisitType">新規区分</label>
+      <select id="firstVisitType">
+        <option value="">（空欄可）</option>
+        <option value="保険新規">保険新規</option>
+        <option value="自費直新規">自費直新規</option>
+        <option value="再来">再来</option>
+      </select>
+    </div>
+  </div>
+
+  <!-- ケース1 -->
+  <div class="section">
+    <div class="section-title">ケース1（主訴）</div>
+
+    <button class="btn-inherit" id="inheritBtn" onclick="doInherit()">
+      ↑ 前回来院データを引き継ぐ
+    </button>
+
+    <div class="form-row">
+      <label for="kubun">区分（参考入力 — 登録時にシステムが自動判定）</label>
+      <select id="kubun">
+        <option value="">（空欄でも可・システムが30日ルールで判定）</option>
+        <option value="初検">初検</option>
+        <option value="再検">再検</option>
+        <option value="後療">後療</option>
+      </select>
+    </div>
+    <div class="form-row">
+      <label for="bodyPart">部位</label>
+      <input type="text" id="bodyPart" placeholder="例: 腰部、肩関節">
+    </div>
+    <div class="form-row">
+      <label for="disease">傷病名</label>
+      <input type="text" id="disease" placeholder="例: 捻挫、打撲">
+    </div>
+    <div class="form-row">
+      <label for="injuryDate">受傷日</label>
+      <input type="date" id="injuryDate">
+    </div>
+    <div class="form-row">
+      <label>施術</label>
+      <div class="checkbox-group">
+        <label class="checkbox-item"><input type="checkbox" id="cold"> 冷罨法</label>
+        <label class="checkbox-item"><input type="checkbox" id="warm"> 温罨法</label>
+        <label class="checkbox-item"><input type="checkbox" id="elec"> 電療</label>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer-bar">
+    <button class="btn-save" id="saveBtn" onclick="openConfirm()">来院を登録する</button>
+  </div>
+
+  <!-- 確認モーダル -->
+  <div class="modal-overlay" id="confirmModal">
+    <div class="modal-box">
+      <div class="modal-title">登録内容の確認</div>
+      <table class="confirm-table" id="confirmTable"></table>
+      <div class="warn-box">
+        &#x26A0;&#xFE0F; <b>区分はシステムが30日ルールで自動判定</b>します。<br>
+        候補金額を算定して保存しますが、<b>請求確定ではありません</b>。<br>
+        月次申請前にスプレッドシートで必ず確認してください。
+      </div>
+      <div class="modal-btns">
+        <button class="btn-cancel" onclick="closeConfirm()">修正する</button>
+        <button class="btn-confirm" id="confirmBtn" onclick="doSave()">登録する</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ローディング -->
+  <div class="loading-overlay" id="loadingOverlay" style="display:none;position:fixed;inset:0;background:rgba(255,255,255,.7);z-index:300;justify-content:center;align-items:center;font-size:16px;color:#555;">
+    保存中…
+  </div>
+
+  <script>
+    var APP_BASE_URL = "<?= appBaseUrl ?>";
+    var PATIENT_ID   = "<?= patientId ?>";
+
+    // 戻り先リンク
+    document.getElementById("back-link").href =
+      PATIENT_ID
+        ? APP_BASE_URL + "?page=detail&patientId=" + encodeURIComponent(PATIENT_ID)
+        : APP_BASE_URL + "?page=search";
+    document.getElementById("patient-chip").textContent =
+      PATIENT_ID ? "患者 ID: " + PATIENT_ID : "患者 ID: 未指定";
+
+    // 今日の日付を初期値にセット
+    (function() {
+      var today = todayYMD();
+      document.getElementById("visitDate").value = today;
+    })();
+
+    /* ===== 前回引き継ぎ ===== */
+    function doInherit() {
+      if (!PATIENT_ID) { alert("患者IDが未指定です。"); return; }
+      var btn = document.getElementById("inheritBtn");
+      btn.disabled = true;
+      btn.textContent = "読み込み中…";
+      google.script.run
+        .withSuccessHandler(function(res) {
+          btn.disabled = false;
+          btn.textContent = "↑ 前回来院データを引き継ぐ";
+          if (!res || !res.ok) {
+            alert("引き継ぎデータ取得失敗: " + (res && res.error ? res.error : "不明なエラー"));
+            return;
+          }
+          if (!res.lastVisitDate || !res.cases || res.cases.length === 0) {
+            alert("前回の来院データが見つかりませんでした。");
+            return;
+          }
+          var c = res.cases[0];
+          if (c.kubun)      document.getElementById("kubun").value      = c.kubun;
+          if (c.bodyPart)   document.getElementById("bodyPart").value   = c.bodyPart;
+          if (c.disease)    document.getElementById("disease").value    = c.disease;
+          if (c.injuryDate) document.getElementById("injuryDate").value = c.injuryDate;
+          document.getElementById("cold").checked = !!c.cold;
+          document.getElementById("warm").checked = !!c.warm;
+          document.getElementById("elec").checked = !!c.elec;
+          alert("前回来院（" + res.lastVisitDate + "）のデータを引き継ぎました。\n内容を確認・修正してください。");
+        })
+        .withFailureHandler(function(err) {
+          btn.disabled = false;
+          btn.textContent = "↑ 前回来院データを引き継ぐ";
+          alert("エラー: " + (err.message || err));
+        })
+        .getPrevVisitData_V3(PATIENT_ID);
+    }
+
+    /* ===== 確認モーダル ===== */
+    function openConfirm() {
+      var visitDate = document.getElementById("visitDate").value;
+      var kubun     = document.getElementById("kubun").value;
+      var bodyPart  = document.getElementById("bodyPart").value.trim();
+      var disease   = document.getElementById("disease").value.trim();
+
+      if (!PATIENT_ID) { alert("患者IDが未指定です。"); return; }
+      if (!visitDate)  { alert("来院日を入力してください。"); return; }
+      // 区分はシステムが自動判定するため必須チェックから除外
+      if (!bodyPart)   { alert("部位を入力してください。"); return; }
+      if (!disease)    { alert("傷病名を入力してください。"); return; }
+
+      var rows = [
+        ["患者ID", PATIENT_ID],
+        ["来院日", visitDate],
+        ["会計区分", document.getElementById("accountingType").value || "（未選択）"],
+        ["新規区分", document.getElementById("firstVisitType").value || "（未選択）"],
+        ["区分",    document.getElementById("kubun").value || "（システムが自動判定）"],
+        ["部位",    bodyPart],
+        ["傷病名",  disease],
+        ["受傷日",  document.getElementById("injuryDate").value || "（未入力）"],
+        ["施術", [
+          document.getElementById("cold").checked ? "冷罨法" : "",
+          document.getElementById("warm").checked ? "温罨法" : "",
+          document.getElementById("elec").checked ? "電療"   : ""
+        ].filter(Boolean).join(" / ") || "なし"],
+        ["ジム会員", document.getElementById("gymMember").checked ? "はい" : "いいえ"],
+        ["慢性候補", document.getElementById("chronicFlag").checked ? "はい" : "いいえ"],
+        ["次回予約", document.getElementById("nextReserv").checked ? "あり" : "なし"],
+      ];
+
+      var tbody = document.getElementById("confirmTable");
+      tbody.innerHTML = "";
+      rows.forEach(function(r) {
+        var tr = document.createElement("tr");
+        tr.innerHTML = "<td>" + esc(r[0]) + "</td><td>" + esc(r[1]) + "</td>";
+        tbody.appendChild(tr);
+      });
+
+      document.getElementById("confirmModal").classList.add("open");
+    }
+
+    function closeConfirm() {
+      document.getElementById("confirmModal").classList.remove("open");
+    }
+
+    /* ===== 保存実行 ===== */
+    function doSave() {
+      document.getElementById("confirmBtn").disabled = true;
+      closeConfirm();
+      document.getElementById("loadingOverlay").style.display = "flex";
+      document.getElementById("saveBtn").disabled = true;
+
+      var payload = {
+        patientId:           PATIENT_ID,
+        visitDate:           document.getElementById("visitDate").value,
+        accountingType:      document.getElementById("accountingType").value,
+        gymMemberFlag:       document.getElementById("gymMember").checked,
+        chronicCandidateFlag: document.getElementById("chronicFlag").checked,
+        nextReservation:     document.getElementById("nextReserv").checked,
+        firstVisitType:      document.getElementById("firstVisitType").value,
+        cases: [{
+          caseNo:     1,
+          kubun:      document.getElementById("kubun").value,
+          bodyPart:   document.getElementById("bodyPart").value.trim(),
+          disease:    document.getElementById("disease").value.trim(),
+          injuryDate: document.getElementById("injuryDate").value,
+          cold:       document.getElementById("cold").checked,
+          warm:       document.getElementById("warm").checked,
+          elec:       document.getElementById("elec").checked,
+        }]
+      };
+
+      google.script.run
+        .withSuccessHandler(function(res) {
+          document.getElementById("loadingOverlay").style.display = "none";
+          document.getElementById("confirmBtn").disabled = false;
+
+          var panel = document.getElementById("result-panel");
+          var msg   = document.getElementById("result-msg");
+          var sub   = document.getElementById("result-sub");
+
+          if (res && res.ok) {
+            panel.className = "";
+            panel.style.display = "block";
+
+            // 候補金額の表示（amounts があれば表示）
+            var amts     = res.amounts || {};
+            var total    = typeof amts.visitTotal === "number"
+              ? "¥" + Number(amts.visitTotal).toLocaleString() : "—";
+            var winPay   = typeof amts.windowPay === "number"
+              ? "¥" + Number(amts.windowPay).toLocaleString()  : "—";
+            var claimPay = typeof amts.claimPay === "number"
+              ? "¥" + Number(amts.claimPay).toLocaleString()   : "—";
+            var kubunResult = esc(res.kubun || "—");
+            var reasonText  = esc(amts.needCheckReason || "");
+
+            panel.innerHTML =
+              "<div class='result-icon'>&#x2705;</div>" +
+              "<div class='result-msg'>来院を登録しました</div>" +
+              "<div class='result-sub' style='text-align:left;margin-top:8px;'>" +
+              "<table style='width:100%;font-size:13px;border-collapse:collapse;'>" +
+              "<tr><td style='color:#888;padding:3px 0;'>visitKey</td>" +
+              "    <td style='font-weight:600;padding:3px 0;'>" + esc(res.visitKey) + "</td></tr>" +
+              "<tr><td style='color:#888;padding:3px 0;'>区分（自動判定）</td>" +
+              "    <td style='font-weight:600;padding:3px 0;'>" + kubunResult + "</td></tr>" +
+              "<tr><td style='color:#888;padding:3px 0;'>来院合計（候補）</td>" +
+              "    <td style='font-weight:600;padding:3px 0;'>" + total + "</td></tr>" +
+              "<tr><td style='color:#888;padding:3px 0;'>窓口負担（候補）</td>" +
+              "    <td style='padding:3px 0;'>" + winPay + "</td></tr>" +
+              "<tr><td style='color:#888;padding:3px 0;'>保険請求（候補）</td>" +
+              "    <td style='padding:3px 0;'>" + claimPay + "</td></tr>" +
+              "</table>" +
+              "<div style='margin-top:10px;padding:8px 10px;background:#fff3cd;" +
+              "border:1px solid #ffc107;border-radius:6px;font-size:12px;color:#856404;'>" +
+              "&#x26A0;&#xFE0F; <b>請求確定ではありません。</b><br>" +
+              "月次申請前に必ずスプレッドシートで確認してください。<br>" +
+              "要確認理由: " + reasonText + "</div>" +
+              "</div>";
+            document.getElementById("saveBtn").style.display = "none";
+
+            // 患者詳細へのリンクを追加
+            var link = document.createElement("a");
+            link.href   = APP_BASE_URL + "?page=detail&patientId=" + encodeURIComponent(PATIENT_ID);
+            link.target = "_top";
+            link.style.cssText =
+              "display:block;margin-top:14px;text-align:center;" +
+              "color:#3498db;font-size:14px;text-decoration:none;";
+            link.textContent = "← 患者詳細に戻る";
+            panel.appendChild(link);
+          } else {
+            panel.className = "error";
+            panel.style.display = "block";
+            panel.innerHTML =
+              "<div class='result-icon'>&#x274C;</div>" +
+              "<div class='result-msg'>登録に失敗しました</div>" +
+              "<div class='result-sub'>" + esc((res && res.message) || "不明なエラー") + "</div>";
+            document.getElementById("saveBtn").disabled = false;
+          }
+
+          window.scrollTo(0, 0);
+        })
+        .withFailureHandler(function(err) {
+          document.getElementById("loadingOverlay").style.display = "none";
+          document.getElementById("confirmBtn").disabled = false;
+          document.getElementById("saveBtn").disabled = false;
+          alert("保存エラー: " + (err.message || err));
+        })
+        .saveVisitFromWeb_V3(payload);
+    }
+
+    function todayYMD() {
+      var d  = new Date();
+      var mm = d.getMonth() + 1;
+      var dd = d.getDate();
+      return d.getFullYear() + "-" + (mm < 10 ? "0" : "") + mm + "-" + (dd < 10 ? "0" : "") + dd;
+    }
+
+    function esc(s) {
+      return String(s || "")
+        .replace(/&/g, "&amp;").replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,45 @@
+.venv/
+__pycache__/
+output/
+*.ndjson
+*.pdf
+
+# clasp / GAS local config
+.clasp.json
+.claspignore.local
+appsscript.local.json
+
+# auth / credentials
+auth.json
+credentials.json
+token.json
+*.secret.json
+.env
+.env.*
+*.pem
+*.key
+
+# local / temp
+node_modules/
+dist/
+build/
+coverage/
+.cache/
+.DS_Store
+Thumbs.db
+*.log
+*.tmp
+*.bak
+
+# test artifacts
+test-results/
+playwright-report/
+*.trace.zip
+
+# local generated files
+test_d6.xlsx
+
+# generated claim output files (contain patient data)
+tools/claim-excel/申請書_*.json
+tools/claim-excel/申請書_*.xlsx
+tools/claim-excel/申請書_*.pdf

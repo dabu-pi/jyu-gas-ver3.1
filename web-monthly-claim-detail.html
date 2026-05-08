@@ -1,0 +1,611 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>月次申請詳細 — JREC-01</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: "Hiragino Sans", "Yu Gothic", sans-serif;
+      background: #f5f6fa;
+      color: #222;
+      padding: 16px;
+    }
+    .page-header {
+      background: #fff;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      padding: 16px 20px;
+      margin-bottom: 20px;
+    }
+    .page-header h1 { font-size: 18px; font-weight: 700; color: #2c3e50; margin-bottom: 4px; }
+    .page-header p  { font-size: 12px; color: #888; }
+
+    .back-link {
+      display: inline-block;
+      font-size: 13px;
+      color: #2980b9;
+      text-decoration: none;
+      margin-bottom: 16px;
+    }
+    .back-link:hover { text-decoration: underline; }
+
+    .summary-card {
+      background: #fff;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      padding: 16px;
+      margin-bottom: 16px;
+    }
+    .summary-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+      margin-top: 12px;
+    }
+    @media (max-width: 480px) { .summary-grid { grid-template-columns: 1fr 1fr; } }
+    .kpi-item { text-align: center; }
+    .kpi-label { font-size: 11px; color: #888; margin-bottom: 4px; }
+    .kpi-value { font-size: 20px; font-weight: 700; color: #2c3e50; }
+    .kpi-value.warn { color: #e67e22; }
+
+    .badge {
+      display: inline-block;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 3px 8px;
+      border-radius: 3px;
+    }
+    .badge-ready { background: #d4edda; color: #155724; }
+    .badge-check { background: #fff3cd; color: #856404; }
+
+    .note-box {
+      background: #fff3cd;
+      border: 1px solid #ffc107;
+      border-radius: 6px;
+      padding: 10px 14px;
+      font-size: 12px;
+      color: #856404;
+      margin-bottom: 16px;
+      line-height: 1.5;
+    }
+    .info-box {
+      background: #d1ecf1;
+      border: 1px solid #bee5eb;
+      border-radius: 6px;
+      padding: 10px 14px;
+      font-size: 12px;
+      color: #0c5460;
+      margin-bottom: 16px;
+      line-height: 1.5;
+    }
+
+    .section-label {
+      font-size: 11px;
+      font-weight: 700;
+      color: #888;
+      text-transform: uppercase;
+      letter-spacing: .05em;
+      margin-bottom: 10px;
+      margin-top: 20px;
+    }
+
+    .table-wrap { overflow-x: auto; margin-bottom: 16px; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: #fff;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      overflow: hidden;
+      font-size: 13px;
+    }
+    thead th {
+      background: #f0f2f5;
+      padding: 10px 12px;
+      text-align: left;
+      font-weight: 700;
+      color: #444;
+      white-space: nowrap;
+      border-bottom: 1px solid #ddd;
+    }
+    tbody tr { border-bottom: 1px solid #eee; }
+    tbody tr:last-child { border-bottom: none; }
+    tbody tr.has-check { background: #fffbf0; }
+    tbody td {
+      padding: 10px 12px;
+      vertical-align: top;
+      white-space: nowrap;
+    }
+    td.amt { text-align: right; font-variant-numeric: tabular-nums; }
+    td.reason { white-space: normal; max-width: 220px; font-size: 11px; color: #856404; }
+
+    tfoot td {
+      padding: 10px 12px;
+      font-weight: 700;
+      background: #f8f9ff;
+      border-top: 2px solid #ddd;
+      white-space: nowrap;
+    }
+    tfoot td.amt { text-align: right; }
+
+    .transfer-section {
+      background: #fff;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      padding: 16px;
+      margin-bottom: 16px;
+    }
+    .transfer-section h3 { font-size: 14px; font-weight: 700; margin-bottom: 8px; color: #2c3e50; }
+    .btn {
+      padding: 9px 20px;
+      border-radius: 6px;
+      font-size: 14px;
+      font-weight: 700;
+      border: none;
+      cursor: pointer;
+    }
+    .btn-primary { background: #2980b9; color: #fff; }
+    .btn-primary:hover { background: #2471a3; }
+    .btn-primary:disabled { background: #aaa; cursor: default; }
+
+    #transfer-result {
+      display: none;
+      margin-top: 12px;
+      padding: 12px;
+      border-radius: 6px;
+      font-size: 13px;
+    }
+    #transfer-result.ok  { background: #d4edda; color: #155724; }
+    #transfer-result.err { background: #f8d7da; color: #721c24; }
+
+    #pdf-result {
+      display: none;
+      margin-top: 12px;
+      padding: 12px;
+      border-radius: 6px;
+      font-size: 13px;
+      line-height: 1.6;
+    }
+    #pdf-result.ok  { background: #d4edda; color: #155724; }
+    #pdf-result.err { background: #f8d7da; color: #721c24; }
+    #pdf-result.warn { background: #fff3cd; color: #856404; }
+    .pdf-link {
+      display: inline-block;
+      margin-top: 8px;
+      padding: 6px 14px;
+      background: #155724;
+      color: #fff;
+      border-radius: 4px;
+      text-decoration: none;
+      font-weight: 700;
+      font-size: 13px;
+    }
+    .pdf-link:hover { background: #0d3f17; }
+
+    #loading-detail { display: none; font-size: 13px; color: #666; padding: 12px 0; }
+    #error-detail {
+      display: none;
+      background: #f8d7da;
+      color: #721c24;
+      border-radius: 6px;
+      padding: 12px 16px;
+      margin-bottom: 16px;
+      font-size: 13px;
+    }
+  </style>
+</head>
+<body>
+  <div id="loading-detail">読み込み中...</div>
+  <div id="error-detail"></div>
+  <div id="main-content" style="display:none">
+
+    <div class="page-header">
+      <h1 id="page-title">月次申請詳細</h1>
+      <p id="page-sub"></p>
+    </div>
+
+    <a class="back-link" id="back-link" href="#" target="_top">← 月次申請一覧に戻る</a>
+
+    <div id="note-check" class="note-box" style="display:none">
+      ⚠️ 要確認フラグがある来院があります。月次申請前にスプレッドシートで内容を確認してください。
+    </div>
+
+    <div class="summary-card">
+      <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px">
+        <span id="status-badge"></span>
+      </div>
+      <div class="summary-grid">
+        <div class="kpi-item">
+          <div class="kpi-label">来院数</div>
+          <div class="kpi-value" id="kpi-visits">—</div>
+        </div>
+        <div class="kpi-item">
+          <div class="kpi-label">来院合計</div>
+          <div class="kpi-value" id="kpi-vt">—</div>
+        </div>
+        <div class="kpi-item">
+          <div class="kpi-label">窓口負担</div>
+          <div class="kpi-value" id="kpi-wp">—</div>
+        </div>
+        <div class="kpi-item">
+          <div class="kpi-label">保険請求</div>
+          <div class="kpi-value" id="kpi-cp">—</div>
+        </div>
+        <div class="kpi-item">
+          <div class="kpi-label">要確認</div>
+          <div class="kpi-value" id="kpi-nc">—</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="section-label">施術日別明細</div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>施術日</th>
+            <th>区分</th>
+            <th>算定区分</th>
+            <th style="text-align:right">来院合計</th>
+            <th style="text-align:right">窓口負担</th>
+            <th style="text-align:right">保険請求</th>
+            <th style="text-align:center">要確認</th>
+            <th>要確認理由</th>
+          </tr>
+        </thead>
+        <tbody id="visit-tbody"></tbody>
+        <tfoot id="visit-tfoot"></tfoot>
+      </table>
+    </div>
+
+    <div class="transfer-section">
+      <h3>Step 1: 申請書転記データ生成</h3>
+      <div class="info-box">
+        申請書_転記データシートに当月分の集計データを書き込みます（upsert・冪等）。<br>
+        <strong>申請書PDF生成の前に必ず実行してください。</strong>
+        要確認フラグがある場合は先にスプレッドシートで確認してください。
+      </div>
+      <button class="btn btn-primary" id="transfer-btn" onclick="doTransfer()">申請書転記データを生成</button>
+      <div id="transfer-result"></div>
+    </div>
+
+    <div class="transfer-section" id="ndjson-section">
+      <h3>Step 2: 申請書 NDJSON 出力（推奨）</h3>
+      <div class="info-box">
+        申請書データを NDJSON 形式で Drive に出力します。<br>
+        ダウンロード後、ローカルで <code>python write_application.py --batch &lt;ファイル名&gt;</code> を実行すると<br>
+        施術日カレンダー○・転帰・金額が正しく入った Excel 申請書が生成されます。<br>
+        <strong>この方式が帳票品質として正確です（施術日カレンダーの○印・転帰処理を含む）。</strong>
+      </div>
+      <button class="btn btn-primary" id="ndjson-btn" onclick="doNdjsonExport()">申請書 NDJSON を Drive に出力</button>
+      <div id="ndjson-result"></div>
+    </div>
+
+    <div class="transfer-section" id="appgen-b-section">
+      <h3>Step 3: 申請書Excelを生成（B案 Cloud Run・正ルート）</h3>
+      <div class="info-box">
+        既存B案 Cloud Run ルートで Excel 申請書を生成します。<br>
+        <strong>施術日カレンダーの○・転帰・金額が正しく入った帳票品質の申請書が生成されます。</strong><br>
+        生成ファイルは Drive の月別フォルダに保存され、申請書生成ログに記録されます。<br>
+        請求確定前に内容を確認してください。
+      </div>
+      <div id="appgen-b-warn-check" class="note-box" style="display:none">
+        ⚠️ 要確認フラグがある来院があります。申請書生成前にスプレッドシートで内容を確認してください。
+      </div>
+      <button class="btn btn-primary" id="appgen-b-btn" onclick="doAppgenB()">申請書Excelを生成</button>
+      <div id="appgen-b-result" style="display:none; margin-top:12px; padding:12px; border-radius:6px; font-size:13px; line-height:1.6;"></div>
+    </div>
+
+    <div class="transfer-section" id="pdf-section" style="opacity:0.6">
+      <h3>Step 4: 申請書PDF直接生成（試験的 / 帳票品質確認中）</h3>
+      <div class="note-box">
+        ⚠️ Sheets直PDF方式は施術日カレンダーの○印・転帰処理が未実装です。<br>
+        帳票として正確な出力には Step 2 の NDJSON + Python スクリプトをお使いください。
+      </div>
+      <div id="pdf-warn-check" class="note-box" style="display:none">
+        ⚠️ 要確認フラグがある来院があります。PDF を生成しても、月次申請前に Sheets で確認が必要です。
+      </div>
+      <button class="btn btn-primary" id="pdf-btn" onclick="doPdfGenerate()" style="opacity:0.6">申請書PDFを生成（試験的）</button>
+      <div id="pdf-result"></div>
+    </div>
+
+  </div>
+
+  <script>
+    var APP_BASE_URL = "<?= appBaseUrl ?>";
+    var PATIENT_ID  = "<?= patientId ?>";
+    var YM          = "<?= ym ?>";
+
+    function esc(s) {
+      return String(s || "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+    }
+    function yen(n) { return "¥" + Number(n || 0).toLocaleString(); }
+
+    function init() {
+      if (!PATIENT_ID || !YM) {
+        showError("患者IDまたは対象月が未指定です。");
+        return;
+      }
+
+      var backUrl = APP_BASE_URL + "?page=monthlyClaims";
+      document.getElementById("back-link").href = backUrl;
+
+      showLoading(true);
+      google.script.run
+        .withSuccessHandler(function(res) { showLoading(false); onDetail(res); })
+        .withFailureHandler(function(err) { showLoading(false); showError("GAS エラー: " + err.message); })
+        .getMonthlyClaimDetail_V3(PATIENT_ID, YM);
+    }
+
+    function onDetail(res) {
+      if (!res.ok) { showError(res.message || "取得に失敗しました"); return; }
+
+      document.getElementById("page-title").textContent =
+        res.patientName ? res.patientName + "（" + res.patientId + "）" : res.patientId;
+      document.getElementById("page-sub").textContent = YM + " 月次申請プレビュー";
+
+      // ステータスバッジ
+      var sb = document.getElementById("status-badge");
+      if (res.isReadyForClaim) {
+        sb.innerHTML = '<span class="badge badge-ready">確認OK — 要確認なし</span>';
+      } else {
+        sb.innerHTML = '<span class="badge badge-check">要確認あり（' + res.needCheckCount + '件）</span>';
+        document.getElementById("note-check").style.display = "block";
+      }
+
+      // KPI
+      document.getElementById("kpi-visits").textContent = res.visitCount;
+      document.getElementById("kpi-vt").textContent = yen(res.totalVisitTotal);
+      document.getElementById("kpi-wp").textContent = yen(res.totalWindowPay);
+      document.getElementById("kpi-cp").textContent = yen(res.totalClaimPay);
+      var ncEl = document.getElementById("kpi-nc");
+      ncEl.textContent = res.needCheckCount + "件";
+      if (res.needCheckCount > 0) ncEl.classList.add("warn");
+
+      // 来院テーブル
+      var tbody = document.getElementById("visit-tbody");
+      (res.visits || []).forEach(function(v) {
+        var ncIcon = v.needCheck
+          ? '<span style="color:#e67e22;font-weight:700">要確認</span>'
+          : '<span style="color:#888">—</span>';
+        var tr = document.createElement("tr");
+        if (v.needCheck) tr.classList.add("has-check");
+        tr.innerHTML =
+          "<td>" + esc(v.treatDate) + "</td>" +
+          "<td>" + esc(v.kubun) + "</td>" +
+          "<td>" + esc(v.billedKubun) + "</td>" +
+          "<td class='amt'>" + yen(v.visitTotal) + "</td>" +
+          "<td class='amt'>" + yen(v.windowPay) + "</td>" +
+          "<td class='amt'>" + yen(v.claimPay) + "</td>" +
+          "<td style='text-align:center'>" + ncIcon + "</td>" +
+          "<td class='reason'>" + esc(v.needCheckReason) + "</td>";
+        tbody.appendChild(tr);
+      });
+
+      // 合計行
+      var tfoot = document.getElementById("visit-tfoot");
+      tfoot.innerHTML =
+        "<tr><td colspan='3'>合計</td>" +
+        "<td class='amt'>" + yen(res.totalVisitTotal) + "</td>" +
+        "<td class='amt'>" + yen(res.totalWindowPay) + "</td>" +
+        "<td class='amt'>" + yen(res.totalClaimPay) + "</td>" +
+        "<td colspan='2'></td></tr>";
+
+      document.getElementById("main-content").style.display = "block";
+    }
+
+    function doTransfer() {
+      if (!confirm(YM + " の申請書転記データを生成します。\n" +
+                   "（申請書_転記データシートに upsert されます）\n\nよろしいですか？")) return;
+
+      var btn = document.getElementById("transfer-btn");
+      btn.disabled = true;
+      btn.textContent = "生成中...";
+
+      google.script.run
+        .withSuccessHandler(function(res) {
+          btn.disabled = false;
+          btn.textContent = "申請書転記データを生成";
+          var el = document.getElementById("transfer-result");
+          el.style.display = "block";
+          if (res.ok) {
+            el.className = "ok";
+            el.textContent = res.message +
+              "  当月合計: ¥" + Number(res.total || 0).toLocaleString() +
+              " / 窓口: ¥" + Number(res.copay || 0).toLocaleString() +
+              " / 請求: ¥" + Number(res.claim || 0).toLocaleString();
+          } else {
+            el.className = "err";
+            el.textContent = "エラー: " + (res.message || "不明なエラー");
+          }
+        })
+        .withFailureHandler(function(err) {
+          btn.disabled = false;
+          btn.textContent = "申請書転記データを生成";
+          var el = document.getElementById("transfer-result");
+          el.style.display = "block";
+          el.className = "err";
+          el.textContent = "GAS エラー: " + err.message;
+        })
+        .buildMonthlyTransferData_V3(PATIENT_ID, YM);
+    }
+
+    function doNdjsonExport() {
+      var btn = document.getElementById("ndjson-btn");
+      btn.disabled = true;
+      btn.textContent = "出力中...";
+      document.getElementById("ndjson-result").style.display = "none";
+
+      google.script.run
+        .withSuccessHandler(function(res) {
+          btn.disabled = false;
+          btn.textContent = "申請書 NDJSON を Drive に出力";
+          var el = document.getElementById("ndjson-result");
+          el.style.display = "block";
+          if (res.ok) {
+            el.className = "ok";
+            el.style.background = "#d4edda";
+            el.style.color = "#155724";
+            el.style.borderRadius = "6px";
+            el.style.padding = "12px";
+            el.style.marginTop = "12px";
+            el.innerHTML =
+              "✅ NDJSON を Drive に出力しました<br>" +
+              "ファイル名: " + esc(res.fileName || "") + "<br>" +
+              "<a href='" + esc(res.ndjsonUrl || "") + "' target='_blank' style='color:#155724;font-weight:bold'>Drive で開く →</a><br><br>" +
+              "<strong>次のステップ:</strong><br>" +
+              "1. 上記リンクから NDJSON ファイルをダウンロード<br>" +
+              "2. ローカルで実行: <code>python write_application.py --batch &lt;ファイル名&gt;</code><br>" +
+              "3. 生成された Excel ファイルで申請書を確認・印刷・PDF 化";
+          } else {
+            el.className = "err";
+            el.style.background = "#f8d7da";
+            el.style.color = "#721c24";
+            el.style.borderRadius = "6px";
+            el.style.padding = "12px";
+            el.style.marginTop = "12px";
+            el.textContent = "❌ " + (res.message || "不明なエラー");
+          }
+        })
+        .withFailureHandler(function(err) {
+          btn.disabled = false;
+          btn.textContent = "申請書 NDJSON を Drive に出力";
+          var el = document.getElementById("ndjson-result");
+          el.style.display = "block";
+          el.style.background = "#f8d7da";
+          el.style.color = "#721c24";
+          el.style.borderRadius = "6px";
+          el.style.padding = "12px";
+          el.style.marginTop = "12px";
+          el.textContent = "GAS エラー: " + err.message;
+        })
+        .exportClaimNdjson_V3(PATIENT_ID, YM);
+    }
+
+    function doAppgenB() {
+      if (!confirm(YM + " の申請書Excel（B案）を生成します。\n" +
+                   "患者: " + PATIENT_ID + "\n\n" +
+                   "既存B案 Cloud Run ルートで Excel を生成し、Driveに保存します。\n" +
+                   "よろしいですか？")) return;
+
+      var btn = document.getElementById("appgen-b-btn");
+      btn.disabled = true;
+      btn.textContent = "生成中...";
+      document.getElementById("appgen-b-result").style.display = "none";
+
+      google.script.run
+        .withSuccessHandler(function(res) {
+          btn.disabled = false;
+          btn.textContent = "申請書Excelを生成";
+          var el = document.getElementById("appgen-b-result");
+          el.style.display = "block";
+          if (res.ok) {
+            el.style.background = "#d4edda";
+            el.style.color = "#155724";
+            el.innerHTML =
+              "✅ 申請書Excelを生成しました。Driveで確認してください。<br>" +
+              "ファイル名: " + esc(res.fileName || "") + "<br>" +
+              "<a href='" + esc(res.fileUrl || "") + "' target='_blank' " +
+              "style='display:inline-block;margin-top:8px;padding:6px 14px;" +
+              "background:#155724;color:#fff;border-radius:4px;text-decoration:none;" +
+              "font-weight:700;font-size:13px'>Driveで開く →</a><br>" +
+              "<span style='font-size:11px;color:#3d6b4f;margin-top:6px;display:block'>" +
+              "申請書生成ログに記録されました。</span>";
+          } else {
+            el.style.background = "#f8d7da";
+            el.style.color = "#721c24";
+            el.innerHTML =
+              "❌ 申請書生成に失敗しました。設定または月次データを確認してください。<br>" +
+              (res.errorCode ? "<span style='font-size:11px'>エラーコード: " + esc(res.errorCode) + "</span><br>" : "") +
+              esc(res.message || "不明なエラー") + "<br>" +
+              "<span style='font-size:11px;margin-top:4px;display:block'>" +
+              "問題が続く場合はスプレッドシートメニュー「帳票出力 → 申請書を出力」からも実行できます。</span>";
+          }
+        })
+        .withFailureHandler(function(err) {
+          btn.disabled = false;
+          btn.textContent = "申請書Excelを生成";
+          var el = document.getElementById("appgen-b-result");
+          el.style.display = "block";
+          el.style.background = "#f8d7da";
+          el.style.color = "#721c24";
+          el.textContent = "GAS エラー: " + err.message;
+        })
+        .generateClaimApplicationBFromWeb_V3(PATIENT_ID, YM);
+    }
+
+    function doPdfGenerate() {
+      var warnMsg = "申請書PDFを生成します。\n" +
+                   "患者: " + PATIENT_ID + " / 月: " + YM + "\n\n" +
+                   "この操作はテンプレートシートに書き込み、DriveにPDFを作成します。\n" +
+                   "よろしいですか？";
+      if (!confirm(warnMsg)) return;
+
+      var btn = document.getElementById("pdf-btn");
+      btn.disabled = true;
+      btn.textContent = "生成中...";
+      document.getElementById("pdf-result").style.display = "none";
+
+      google.script.run
+        .withSuccessHandler(function(res) {
+          btn.disabled = false;
+          btn.textContent = "申請書PDFを生成";
+          var el = document.getElementById("pdf-result");
+          el.style.display = "block";
+
+          if (res.ok) {
+            el.className = "ok";
+            el.innerHTML =
+              "✅ 申請書PDFを生成しました<br>" +
+              "ファイル名: " + esc(res.fileName || "") + "<br>" +
+              "書込セル数: " + (res.writtenCells || 0) + " セル<br>" +
+              "請求金額: ¥" + Number(res.transferClaim || 0).toLocaleString() +
+              "<br><a class='pdf-link' href='" + esc(res.pdfUrl || "") + "' target='_blank'>PDFを開く →</a>";
+          } else if (res.reasonCode === "TEMPLATE_NOT_FOUND") {
+            el.className = "warn";
+            el.innerHTML =
+              "⚠️ " + esc(res.message || "") + "<br><br>" +
+              "転記データ生成は完了しています。<br>" +
+              "当月合計: ¥" + Number(res.transferTotal || 0).toLocaleString() +
+              " / 請求: ¥" + Number(res.transferClaim || 0).toLocaleString();
+          } else {
+            el.className = "err";
+            el.textContent = "❌ " + (res.message || "不明なエラー") + (res.reasonCode ? " (" + res.reasonCode + ")" : "");
+          }
+        })
+        .withFailureHandler(function(err) {
+          btn.disabled = false;
+          btn.textContent = "申請書PDFを生成";
+          var el = document.getElementById("pdf-result");
+          el.style.display = "block";
+          el.className = "err";
+          el.textContent = "GAS エラー: " + err.message;
+        })
+        .generateClaimApplication_V3(PATIENT_ID, YM);
+    }
+
+    function showLoading(on) {
+      document.getElementById("loading-detail").style.display = on ? "block" : "none";
+    }
+    function showError(msg) {
+      var el = document.getElementById("error-detail");
+      el.textContent = msg;
+      el.style.display = "block";
+    }
+
+    // needCheck あり時に PDF 警告・B案警告も表示
+    var _origOnDetail = onDetail;
+    onDetail = function(res) {
+      _origOnDetail(res);
+      if (res.ok && res.needCheckCount > 0) {
+        document.getElementById("pdf-warn-check").style.display = "block";
+        document.getElementById("appgen-b-warn-check").style.display = "block";
+      }
+    };
+
+    window.addEventListener("load", init);
+  </script>
+</body>
+</html>

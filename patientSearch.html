@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>患者検索 — JREC-01</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: "Hiragino Sans", "Yu Gothic", sans-serif;
+      background: #f5f6fa;
+      color: #222;
+      padding: 16px;
+    }
+    .nav-link {
+      display: inline-block;
+      font-size: 12px;
+      color: #888;
+      text-decoration: none;
+      margin-bottom: 10px;
+    }
+    .nav-link:hover { color: #3498db; text-decoration: underline; }
+    h1 {
+      font-size: 18px;
+      font-weight: 700;
+      color: #2c3e50;
+      margin-bottom: 16px;
+    }
+    .search-row {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+    #keyword {
+      flex: 1;
+      padding: 10px 12px;
+      font-size: 16px;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      outline: none;
+      color: #222;
+    }
+    #keyword:focus { border-color: #3498db; }
+    #searchBtn {
+      padding: 10px 18px;
+      font-size: 15px;
+      background: #3498db;
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    #searchBtn:hover    { background: #2980b9; }
+    #searchBtn:disabled { background: #aaa; cursor: default; }
+
+    #status {
+      font-size: 13px;
+      color: #555;
+      margin-bottom: 10px;
+      min-height: 18px;
+    }
+
+    /* カード一覧 */
+    #resultList {
+      display: none;   /* JS で "block" に切り替える */
+    }
+    .card {
+      background: #fff;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      padding: 14px 16px;
+      margin-bottom: 8px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      transition: background .12s, border-color .12s;
+    }
+    .card:hover        { background: #e8f4fd; border-color: #3498db; }
+    .card:active       { background: #d0eaf9; }
+    .card.selected     { background: #d4edda; border-color: #27ae60; }
+    .card.selecting    { opacity: .55; pointer-events: none; }
+    .card-body         { flex: 1; min-width: 0; }
+    .card-name {
+      font-size: 16px;
+      font-weight: 700;
+      color: #222;
+      margin-bottom: 4px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .card-sub {
+      font-size: 12px;
+      color: #666;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    .card-sub span { white-space: nowrap; }
+    .card-arrow {
+      font-size: 20px;
+      color: #bbb;
+      flex-shrink: 0;
+    }
+    .card:hover .card-arrow { color: #3498db; }
+
+    #emptyMsg {
+      display: none;   /* JS で "block" に切り替える */
+      text-align: center;
+      padding: 32px 0;
+      color: #999;
+      font-size: 15px;
+    }
+
+    /* 選択後パネル */
+    #selected-panel {
+      display: none;
+      background: #d4edda;
+      border: 1px solid #27ae60;
+      border-radius: 8px;
+      padding: 14px 16px;
+      margin-top: 12px;
+    }
+    .sel-label {
+      font-size: 12px;
+      color: #155724;
+      margin-bottom: 4px;
+    }
+    .sel-name {
+      font-size: 16px;
+      font-weight: 700;
+      color: #155724;
+      margin-bottom: 12px;
+    }
+    .btn-selfpay {
+      display: block;
+      background: #27ae60;
+      color: #fff;
+      border: none;
+      padding: 12px 0;
+      border-radius: 6px;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      text-align: center;
+      text-decoration: none;
+      width: 100%;
+    }
+    .btn-selfpay:hover { background: #229954; }
+
+    /* トースト */
+    #toast {
+      display: none;
+      position: fixed;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #27ae60;
+      color: #fff;
+      padding: 12px 24px;
+      border-radius: 8px;
+      font-size: 15px;
+      font-weight: 600;
+      box-shadow: 0 4px 12px rgba(0,0,0,.2);
+      z-index: 100;
+      white-space: nowrap;
+    }
+    #toast.error { background: #e74c3c; }
+  </style>
+</head>
+<body>
+  <a class="nav-link" href="<?= appBaseUrl ?>?page=home" target="_top">&#8592; Web ホームへ</a>
+  <h1>患者検索</h1>
+
+  <div class="search-row">
+    <input type="text" id="keyword" placeholder="患者ID・氏名・フリガナで検索" autofocus>
+    <button id="searchBtn" onclick="doSearch()">検索</button>
+  </div>
+
+  <div id="status"></div>
+  <div id="emptyMsg">該当する患者が見つかりませんでした。</div>
+  <div id="resultList"></div>
+
+  <div id="selected-panel">
+    <div class="sel-label">選択済み患者</div>
+    <div class="sel-name" id="sel-name"></div>
+    <a id="detail-link" class="btn-selfpay" style="background:#6c757d;margin-bottom:8px" target="_top">患者詳細を見る →</a>
+    <a id="selfpay-link" class="btn-selfpay" target="_top">自費明細入力 →</a>
+  </div>
+
+  <div id="toast"></div>
+
+  <script>
+    // GAS テンプレートで Web App の /exec URL を埋め込む（サーバー側で確定）
+    var APP_BASE_URL = "<?= appBaseUrl ?>";
+
+    var _searching = false;
+    var _selecting = false;
+
+    document.getElementById("keyword").addEventListener("keydown", function(e) {
+      if (e.key === "Enter") doSearch();
+    });
+
+    /* ===== 検索 ===== */
+    function doSearch() {
+      if (_searching) return;
+      var kw = document.getElementById("keyword").value.trim();
+      if (!kw) { setStatus("キーワードを入力してください。"); return; }
+
+      _searching = true;
+      document.getElementById("searchBtn").disabled = true;
+      setStatus("検索中…");
+      showEl("resultList", false);
+      showEl("emptyMsg",   false);
+      document.getElementById("resultList").innerHTML = "";
+
+      google.script.run
+        .withSuccessHandler(onSearchSuccess)
+        .withFailureHandler(onSearchError)
+        .searchPatients_V3(kw);
+    }
+
+    function onSearchSuccess(rows) {
+      _searching = false;
+      document.getElementById("searchBtn").disabled = false;
+
+      if (!rows || rows.length === 0) {
+        setStatus("");
+        showEl("emptyMsg", true);
+        return;
+      }
+
+      var hint = rows.length === 20 ? "（最大20件）" : "";
+      setStatus(rows.length + " 件ヒット" + hint + " — 行をタップして選択");
+
+      var list = document.getElementById("resultList");
+      rows.forEach(function(p) {
+        var card = document.createElement("div");
+        card.className = "card";
+
+        var sub = esc(p.patientId);
+        if (p.furi)     sub += "　" + esc(p.furi);
+        if (p.birthday) sub += "　" + esc(p.birthday);
+
+        card.innerHTML =
+          "<div class='card-body'>" +
+            "<div class='card-name'>" + esc(p.name || p.patientId) + "</div>" +
+            "<div class='card-sub'><span>" + sub + "</span></div>" +
+          "</div>" +
+          "<div class='card-arrow'>›</div>";
+
+        card.addEventListener("click", function() {
+          selectPatient(card, p.patientId, p.name);
+        });
+        list.appendChild(card);
+      });
+      showEl("resultList", true);
+    }
+
+    function onSearchError(err) {
+      _searching = false;
+      document.getElementById("searchBtn").disabled = false;
+      setStatus("検索エラー: " + (err.message || err));
+    }
+
+    /* ===== 患者選択 ===== */
+    function selectPatient(card, patientId, name) {
+      if (_selecting) return;
+      _selecting = true;
+      card.classList.add("selecting");
+      setStatus("選択中…");
+
+      google.script.run
+        .withSuccessHandler(function() {
+          _selecting = false;
+          card.classList.remove("selecting");
+          card.classList.add("selected");
+          showToast("✓ " + esc(name || patientId) + " を選択しました", false);
+          setStatus("選択完了: " + esc(patientId));
+          showSelectedPanel(patientId, name);
+        })
+        .withFailureHandler(function(err) {
+          _selecting = false;
+          card.classList.remove("selecting");
+          showToast("エラー: " + (err.message || err), true);
+          setStatus("選択失敗");
+        })
+        .setPatientAndDate_V3(patientId);
+    }
+
+    /* ===== トースト ===== */
+    function showToast(msg, isError) {
+      var el = document.getElementById("toast");
+      el.textContent = msg;
+      el.className   = isError ? "error" : "";
+      el.style.display = "block";
+      setTimeout(function() { el.style.display = "none"; }, 3000);
+    }
+
+    /* ===== 選択後パネル ===== */
+    function showSelectedPanel(patientId, name) {
+      var visitKey    = patientId + "_" + todayYMD();
+      // APP_BASE_URL はサーバー側テンプレートで埋め込んだ /exec URL を使う
+      // window.location.href は userCodeAppPanel の内部URL になるため使わない
+      var selfpayUrl  = APP_BASE_URL + "?page=selfpay&visitKey=" + encodeURIComponent(visitKey);
+      var detailUrl   = APP_BASE_URL + "?page=detail&patientId=" + encodeURIComponent(patientId);
+      document.getElementById("sel-name").textContent = (name || patientId) + "（" + patientId + "）";
+      document.getElementById("selfpay-link").href    = selfpayUrl;
+      document.getElementById("detail-link").href     = detailUrl;
+      showEl("selected-panel", true);
+    }
+
+    /** 今日の日付を YYYY-MM-DD で返す（ブラウザのローカル時刻） */
+    function todayYMD() {
+      var d  = new Date();
+      var mm = d.getMonth() + 1;
+      var dd = d.getDate();
+      return d.getFullYear() + "-" + (mm < 10 ? "0" : "") + mm + "-" + (dd < 10 ? "0" : "") + dd;
+    }
+
+    /* ===== ユーティリティ ===== */
+    function setStatus(msg) { document.getElementById("status").textContent = msg; }
+
+    /**
+     * 要素の表示を切り替える。
+     * visible=true のとき display:"block" を明示セット（CSS の display:none を上書き）。
+     * show() で display:"" を使うと CSS ルールが残り再非表示になるバグを回避。
+     */
+    function showEl(id, visible) {
+      document.getElementById(id).style.display = visible ? "block" : "none";
+    }
+
+    function esc(s) {
+      return String(s || "")
+        .replace(/&/g, "&amp;").replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>患者詳細 — JREC-01</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: "Hiragino Sans", "Yu Gothic", sans-serif;
+      background: #f5f6fa;
+      color: #222;
+      padding: 16px;
+      font-size: 14px;
+    }
+
+    .back-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 13px;
+      color: #3498db;
+      text-decoration: none;
+      margin-bottom: 14px;
+    }
+    .back-link:hover { text-decoration: underline; }
+
+    .card {
+      background: #fff;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      padding: 16px;
+      margin-bottom: 14px;
+    }
+    .card-title {
+      font-size: 12px;
+      font-weight: 700;
+      color: #888;
+      text-transform: uppercase;
+      letter-spacing: .05em;
+      margin-bottom: 12px;
+    }
+
+    /* 患者基本情報 */
+    .patient-name {
+      font-size: 22px;
+      font-weight: 700;
+      color: #2c3e50;
+      margin-bottom: 4px;
+    }
+    .patient-furi {
+      font-size: 13px;
+      color: #666;
+      margin-bottom: 10px;
+    }
+    .info-row {
+      display: flex;
+      gap: 20px;
+      flex-wrap: wrap;
+      margin-top: 8px;
+    }
+    .info-item { }
+    .info-label {
+      font-size: 11px;
+      color: #888;
+      margin-bottom: 2px;
+    }
+    .info-value {
+      font-size: 14px;
+      font-weight: 600;
+      color: #333;
+    }
+
+    /* 来院履歴テーブル */
+    .visit-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+    .visit-table th {
+      text-align: left;
+      font-size: 11px;
+      font-weight: 700;
+      color: #888;
+      padding: 6px 8px;
+      border-bottom: 2px solid #eee;
+      white-space: nowrap;
+    }
+    .visit-table td {
+      padding: 8px;
+      border-bottom: 1px solid #f0f0f0;
+      vertical-align: middle;
+    }
+    .visit-table tr:last-child td { border-bottom: none; }
+    .visit-table tr:hover td { background: #f8f9fa; }
+
+    .badge-check {
+      display: inline-block;
+      background: #f8d7da;
+      color: #721c24;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 2px 6px;
+      border-radius: 3px;
+    }
+    .badge-ok {
+      display: inline-block;
+      background: #d4edda;
+      color: #155724;
+      font-size: 11px;
+      padding: 2px 6px;
+      border-radius: 3px;
+    }
+
+    /* ローディング・エラー */
+    #loading {
+      text-align: center;
+      padding: 40px 0;
+      color: #888;
+    }
+    #error-msg {
+      display: none;
+      background: #f8d7da;
+      color: #721c24;
+      border: 1px solid #f5c6cb;
+      border-radius: 6px;
+      padding: 12px 16px;
+      margin-bottom: 14px;
+    }
+    #content { display: none; }
+
+    .empty-visits {
+      text-align: center;
+      padding: 24px 0;
+      color: #999;
+      font-size: 13px;
+    }
+
+    /* アクションボタン群 */
+    .action-row {
+      display: flex;
+      gap: 8px;
+      margin-top: 12px;
+      flex-wrap: wrap;
+    }
+    .btn-action {
+      display: inline-block;
+      padding: 9px 16px;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      text-decoration: none;
+      border: none;
+    }
+    .btn-visit-new {
+      background: #3498db;
+      color: #fff;
+    }
+    .btn-visit-new:hover { background: #2980b9; }
+    .btn-selfpay {
+      background: #27ae60;
+      color: #fff;
+    }
+    .btn-selfpay:hover { background: #229954; }
+  </style>
+</head>
+<body>
+  <a class="back-link" href="<?= appBaseUrl ?>?page=search" target="_top">&#8592; 患者検索に戻る</a>
+
+  <div id="loading">読み込み中…</div>
+  <div id="error-msg"></div>
+
+  <div id="content">
+    <div class="card">
+      <div class="card-title">患者情報</div>
+      <div class="patient-name" id="pt-name"></div>
+      <div class="patient-furi" id="pt-furi"></div>
+      <div class="info-row">
+        <div class="info-item">
+          <div class="info-label">患者ID</div>
+          <div class="info-value" id="pt-id"></div>
+        </div>
+        <div class="info-item">
+          <div class="info-label">生年月日</div>
+          <div class="info-value" id="pt-dob"></div>
+        </div>
+      </div>
+      <div class="action-row" id="action-row" style="display:none">
+        <a id="btn-visit-new" class="btn-action btn-visit-new" target="_top">来院記録を追加 →</a>
+        <a id="btn-selfpay"   class="btn-action btn-selfpay"   target="_top">自費明細入力 →</a>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">直近の来院履歴（最大10件）</div>
+      <div id="visit-body">
+        <table class="visit-table">
+          <thead>
+            <tr>
+              <th>施術日</th>
+              <th>区分</th>
+              <th>会計区分</th>
+              <th>来院合計</th>
+              <th>状態</th>
+            </tr>
+          </thead>
+          <tbody id="visit-rows"></tbody>
+        </table>
+        <div id="empty-visits" class="empty-visits" style="display:none">来院記録がありません</div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    var APP_BASE_URL  = "<?= appBaseUrl ?>";
+    var PATIENT_ID    = "<?= patientId ?>";
+
+    window.addEventListener("load", function() {
+      if (!PATIENT_ID) {
+        showError("患者IDが指定されていません。");
+        return;
+      }
+      google.script.run
+        .withSuccessHandler(onDetailLoad)
+        .withFailureHandler(onDetailError)
+        .getPatientDetail_V3(PATIENT_ID);
+    });
+
+    function onDetailLoad(res) {
+      document.getElementById("loading").style.display = "none";
+      if (res.error) { showError(res.error); return; }
+
+      var p = res.patient;
+      document.getElementById("pt-name").textContent = p.name   || p.patientId;
+      document.getElementById("pt-furi").textContent = p.furi   || "";
+      document.getElementById("pt-id").textContent   = p.patientId;
+      document.getElementById("pt-dob").textContent  = p.birthday || "—";
+
+      // アクションボタン群（来院記録追加 / 自費明細入力）
+      var todayVK    = p.patientId + "_" + todayYMD();
+      var visitNewUrl = APP_BASE_URL + "?page=visitNew&patientId=" + encodeURIComponent(p.patientId);
+      var selfpayUrl  = APP_BASE_URL + "?page=selfpay&visitKey="   + encodeURIComponent(todayVK);
+      document.getElementById("btn-visit-new").href = visitNewUrl;
+      document.getElementById("btn-selfpay").href   = selfpayUrl;
+      document.getElementById("action-row").style.display = "flex";
+
+      // 来院履歴
+      var tbody = document.getElementById("visit-rows");
+      if (!res.recentVisits || res.recentVisits.length === 0) {
+        document.getElementById("empty-visits").style.display = "block";
+        document.querySelector(".visit-table").style.display = "none";
+      } else {
+        res.recentVisits.forEach(function(v) {
+          var tr = document.createElement("tr");
+          var total = v.visitTotal ? "¥" + Number(v.visitTotal).toLocaleString() : "—";
+          var statusHtml = v.needCheck
+            ? "<span class='badge-check'>要確認</span>"
+            : "<span class='badge-ok'>正常</span>";
+          tr.innerHTML =
+            "<td>" + esc(v.treatDate)      + "</td>" +
+            "<td>" + esc(v.kubun)          + "</td>" +
+            "<td>" + esc(v.accountingType) + "</td>" +
+            "<td>" + esc(total)            + "</td>" +
+            "<td>" + statusHtml            + "</td>";
+          tbody.appendChild(tr);
+        });
+      }
+
+      document.getElementById("content").style.display = "block";
+    }
+
+    function onDetailError(err) {
+      document.getElementById("loading").style.display = "none";
+      showError("読み込みエラー: " + (err.message || err));
+    }
+
+    function showError(msg) {
+      var el = document.getElementById("error-msg");
+      el.textContent = msg;
+      el.style.display = "block";
+    }
+
+    function todayYMD() {
+      var d  = new Date();
+      var mm = d.getMonth() + 1;
+      var dd = d.getDate();
+      return d.getFullYear() + "-" + (mm < 10 ? "0" : "") + mm + "-" + (dd < 10 ? "0" : "") + dd;
+    }
+
+    function esc(s) {
+      return String(s || "")
+        .replace(/&/g, "&amp;").replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+    }
+  </script>
+</body>
+</html>

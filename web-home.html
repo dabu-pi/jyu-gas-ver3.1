@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>JREC-01 ホーム — 柔整保険申請書</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: "Hiragino Sans", "Yu Gothic", sans-serif;
+      background: #f5f6fa;
+      color: #222;
+      padding: 16px;
+    }
+    .page-header {
+      background: #fff;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      padding: 16px 20px;
+      margin-bottom: 20px;
+    }
+    .page-header h1 {
+      font-size: 20px;
+      font-weight: 700;
+      color: #2c3e50;
+      margin-bottom: 4px;
+    }
+    .page-header p {
+      font-size: 12px;
+      color: #888;
+    }
+
+    .section-label {
+      font-size: 11px;
+      font-weight: 700;
+      color: #888;
+      text-transform: uppercase;
+      letter-spacing: .05em;
+      margin-bottom: 10px;
+      padding-left: 2px;
+    }
+
+    .card-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-bottom: 24px;
+    }
+    @media (min-width: 480px) {
+      .card-grid { grid-template-columns: 1fr 1fr 1fr; }
+    }
+
+    .card {
+      background: #fff;
+      border: 1px solid #ddd;
+      border-radius: 10px;
+      padding: 18px 14px 14px;
+      text-decoration: none;
+      color: inherit;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      transition: background .12s, border-color .12s, box-shadow .12s;
+      cursor: pointer;
+    }
+    .card.active:hover {
+      background: #e8f4fd;
+      border-color: #3498db;
+      box-shadow: 0 2px 8px rgba(52,152,219,.15);
+    }
+    .card.disabled {
+      opacity: .55;
+      cursor: default;
+    }
+
+    .card-icon {
+      font-size: 28px;
+      line-height: 1;
+    }
+    .card-title {
+      font-size: 14px;
+      font-weight: 700;
+      color: #2c3e50;
+    }
+    .card.active .card-title { color: #2980b9; }
+    .card-desc {
+      font-size: 11px;
+      color: #888;
+      line-height: 1.4;
+    }
+    .card-badge {
+      display: inline-block;
+      font-size: 10px;
+      font-weight: 700;
+      padding: 2px 6px;
+      border-radius: 3px;
+      margin-top: 2px;
+      align-self: flex-start;
+    }
+    .badge-live    { background: #d4edda; color: #155724; }
+    .badge-phase2  { background: #fff3cd; color: #856404; }
+    .badge-phase3  { background: #e2e3e5; color: #495057; }
+    .badge-future  { background: #e2e3e5; color: #495057; }
+  </style>
+</head>
+<body>
+  <div class="page-header">
+    <h1>JREC-01 柔整保険申請書</h1>
+    <p>スプレッドシート運用中 — Web UI WEB-1〜WEB-3 稼働中</p>
+  </div>
+
+  <div class="section-label">患者管理</div>
+  <div class="card-grid">
+    <a class="card active" href="<?= appBaseUrl ?>?page=search" target="_top">
+      <div class="card-icon">&#x1F50D;</div>
+      <div class="card-title">患者検索</div>
+      <div class="card-desc">患者IDまたは氏名で検索</div>
+      <span class="card-badge badge-live">稼働中</span>
+    </a>
+  </div>
+
+  <div class="section-label">来院・施術</div>
+  <div class="card-grid">
+    <a class="card active" href="<?= appBaseUrl ?>?page=visitNew" target="_top">
+      <div class="card-icon">&#x1F4CB;</div>
+      <div class="card-title">来院記録</div>
+      <div class="card-desc">来院日・施術内容の登録</div>
+      <span class="card-badge badge-live">稼働中</span>
+    </a>
+    <div class="card disabled">
+      <div class="card-icon">&#x1F4C4;</div>
+      <div class="card-title">施術録</div>
+      <div class="card-desc">施術録ドキュメント生成</div>
+      <span class="card-badge badge-future">準備中</span>
+    </div>
+  </div>
+
+  <div class="section-label">月次申請</div>
+  <div class="card-grid">
+    <a class="card active" href="<?= appBaseUrl ?>?page=monthlyClaims" target="_top">
+      <div class="card-icon">&#x1F4DD;</div>
+      <div class="card-title">月次申請</div>
+      <div class="card-desc">申請対象者一覧・プレビュー・転記データ生成</div>
+      <span class="card-badge badge-live">稼働中</span>
+    </a>
+  </div>
+
+  <div class="section-label">管理</div>
+  <div class="card-grid">
+    <div class="card disabled">
+      <div class="card-icon">&#x2699;&#xFE0F;</div>
+      <div class="card-title">設定</div>
+      <div class="card-desc">単価・算定設定</div>
+      <span class="card-badge badge-future">準備中</span>
+    </div>
+    <div class="card disabled">
+      <div class="card-icon">&#x1F4CA;</div>
+      <div class="card-title">監査ログ</div>
+      <div class="card-desc">操作ログ・変更履歴</div>
+      <span class="card-badge badge-future">準備中</span>
+    </div>
+  </div>
+</body>
+</html>

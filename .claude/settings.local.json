@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git pull *)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)",
+      "Bash(clasp push *)",
+      "Bash(node *)",
+      "Bash(python3 -)",
+      "Bash(grep -v \"^[0-9]*:[ ]*//\")"
+    ]
+  }
+}

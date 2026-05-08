@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>B-2 月次申請データ整合確認 — JREC-01</title>
+  <style>
+    body { font-family: monospace; background: #111; color: #eee; padding: 16px; font-size: 13px; line-height: 1.6; }
+    #status  { color: #ff0; }
+    .ok      { color: #0f0; }
+    .warn    { color: #fa0; }
+    .err     { color: #f55; }
+    #json-output { display: none; }
+  </style>
+</head>
+<body>
+  <div id="status">実行中... (ym=<?= ym ?>)</div>
+  <div id="content"></div>
+  <div id="json-output"></div>
+
+  <script>
+    var YM = "<?= ym ?>";
+    window.addEventListener("load", function() {
+      google.script.run
+        .withSuccessHandler(function(res) {
+          document.getElementById("status").textContent = "完了 — " + YM;
+          var html = "<div class='" + (res.ok ? "ok" : "err") + "'>";
+          html += "status: " + (res.status || (res.ok ? "OK" : "ERROR")) + "</div>";
+          if (res.listResult) {
+            html += "<div>patients: " + res.listResult.total + "</div>";
+            if (res.firstPatient) {
+              html += "<div>firstPatient: " + JSON.stringify(res.firstPatient) + "</div>";
+            }
+          }
+          if (res.integrity && res.integrity.checksums) {
+            res.integrity.checksums.forEach(function(c) {
+              html += "<div class='" + (c.pass ? "ok" : "err") + "'>";
+              html += "[" + (c.pass ? "PASS" : "FAIL") + "] " + c.check
+                + " list=" + c.listValue + " detail=" + c.detailValue + "</div>";
+            });
+          }
+          document.getElementById("content").innerHTML = html;
+          document.getElementById("json-output").textContent = JSON.stringify(res);
+          document.getElementById("json-output").setAttribute("data-ready", "1");
+        })
+        .withFailureHandler(function(e) {
+          document.getElementById("status").textContent = "ERROR: " + e.message;
+          document.getElementById("json-output").textContent = JSON.stringify({ ok: false, error: e.message });
+          document.getElementById("json-output").setAttribute("data-ready", "1");
+        })
+        .verifyMonthlyClaimData_V3(YM);
+    });
+  </script>
+</body>
+</html>

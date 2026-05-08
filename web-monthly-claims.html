@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>月次申請 — JREC-01</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: "Hiragino Sans", "Yu Gothic", sans-serif;
+      background: #f5f6fa;
+      color: #222;
+      padding: 16px;
+    }
+    .page-header {
+      background: #fff;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      padding: 16px 20px;
+      margin-bottom: 20px;
+    }
+    .page-header h1 { font-size: 20px; font-weight: 700; color: #2c3e50; margin-bottom: 4px; }
+    .page-header p  { font-size: 12px; color: #888; }
+
+    .back-link {
+      display: inline-block;
+      font-size: 13px;
+      color: #2980b9;
+      text-decoration: none;
+      margin-bottom: 16px;
+    }
+    .back-link:hover { text-decoration: underline; }
+
+    .search-box {
+      background: #fff;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      padding: 16px;
+      margin-bottom: 20px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .search-box label { font-size: 14px; font-weight: 700; color: #333; white-space: nowrap; }
+    .search-box input[type="month"] {
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      padding: 8px 12px;
+      font-size: 14px;
+      flex: 1;
+      min-width: 140px;
+    }
+    .btn {
+      padding: 9px 20px;
+      border-radius: 6px;
+      font-size: 14px;
+      font-weight: 700;
+      border: none;
+      cursor: pointer;
+    }
+    .btn-primary { background: #2980b9; color: #fff; }
+    .btn-primary:hover { background: #2471a3; }
+    .btn-primary:disabled { background: #aaa; cursor: default; }
+
+    #loading  { display: none; font-size: 13px; color: #666; padding: 12px 0; }
+    #error-box {
+      display: none;
+      background: #f8d7da;
+      color: #721c24;
+      border-radius: 6px;
+      padding: 12px 16px;
+      margin-bottom: 16px;
+      font-size: 13px;
+    }
+    #empty-msg {
+      display: none;
+      background: #fff;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      padding: 24px;
+      text-align: center;
+      color: #888;
+      font-size: 14px;
+    }
+
+    .result-header {
+      display: none;
+      font-size: 13px;
+      color: #555;
+      margin-bottom: 12px;
+    }
+
+    .note-box {
+      background: #fff3cd;
+      border: 1px solid #ffc107;
+      border-radius: 6px;
+      padding: 10px 14px;
+      font-size: 12px;
+      color: #856404;
+      margin-bottom: 16px;
+      line-height: 1.5;
+    }
+
+    .table-wrap { overflow-x: auto; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: #fff;
+      border-radius: 8px;
+      overflow: hidden;
+      border: 1px solid #ddd;
+      font-size: 13px;
+    }
+    thead th {
+      background: #f0f2f5;
+      padding: 10px 12px;
+      text-align: left;
+      font-weight: 700;
+      color: #444;
+      white-space: nowrap;
+      border-bottom: 1px solid #ddd;
+    }
+    tbody tr { border-bottom: 1px solid #eee; }
+    tbody tr:last-child { border-bottom: none; }
+    tbody tr:hover { background: #f8f9ff; }
+    tbody td {
+      padding: 10px 12px;
+      vertical-align: middle;
+      white-space: nowrap;
+    }
+    td.amt { text-align: right; font-variant-numeric: tabular-nums; }
+
+    .badge {
+      display: inline-block;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 3px 8px;
+      border-radius: 3px;
+    }
+    .badge-ready   { background: #d4edda; color: #155724; }
+    .badge-check   { background: #fff3cd; color: #856404; }
+    .badge-novisit { background: #e2e3e5; color: #495057; }
+
+    .link-detail {
+      color: #2980b9;
+      text-decoration: none;
+      font-weight: 700;
+    }
+    .link-detail:hover { text-decoration: underline; }
+
+    tfoot td {
+      padding: 10px 12px;
+      font-weight: 700;
+      background: #f8f9ff;
+      border-top: 2px solid #ddd;
+      white-space: nowrap;
+    }
+    tfoot td.amt { text-align: right; }
+  </style>
+</head>
+<body>
+  <div class="page-header">
+    <h1>月次申請 — 対象者一覧</h1>
+    <p>対象月を選択して、申請対象患者と集計金額を確認します。</p>
+  </div>
+
+  <a class="back-link" href="<?= appBaseUrl ?>?page=home" target="_top">← Web ホームへ</a>
+
+  <div class="search-box">
+    <label for="ym-input">対象月</label>
+    <input type="month" id="ym-input">
+    <button class="btn btn-primary" id="search-btn" onclick="doSearch()">一覧を取得</button>
+  </div>
+
+  <div id="error-box"></div>
+  <div id="loading">読み込み中...</div>
+  <div id="empty-msg">指定月に保険来院がある患者はいませんでした。</div>
+  <div class="result-header" id="result-header"></div>
+
+  <div class="note-box" id="note-box" style="display:none">
+    ⚠️ 要確認フラグがある患者は月次申請前にスプレッドシートで内容を確認してください。<br>
+    「請求確定」は Sheets UI で確認後に行ってください。
+  </div>
+
+  <div class="table-wrap" id="table-wrap" style="display:none">
+    <table id="result-table">
+      <thead>
+        <tr>
+          <th>患者ID</th>
+          <th>氏名</th>
+          <th style="text-align:right">来院数</th>
+          <th style="text-align:right">来院合計</th>
+          <th style="text-align:right">窓口負担</th>
+          <th style="text-align:right">保険請求</th>
+          <th style="text-align:center">要確認</th>
+          <th style="text-align:center">状態</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="result-tbody"></tbody>
+      <tfoot id="result-tfoot"></tfoot>
+    </table>
+  </div>
+
+  <script>
+    var APP_BASE_URL = "<?= appBaseUrl ?>";
+
+    (function() {
+      var d = new Date();
+      var mm = String(d.getMonth() + 1).padStart(2, "0");
+      document.getElementById("ym-input").value = d.getFullYear() + "-" + mm;
+    })();
+
+    function esc(s) {
+      return String(s || "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+    }
+    function yen(n) { return "¥" + Number(n || 0).toLocaleString(); }
+
+    function doSearch() {
+      var ym = document.getElementById("ym-input").value;
+      if (!ym) { showError("対象月を選択してください。"); return; }
+
+      var btn = document.getElementById("search-btn");
+      btn.disabled = true;
+      showLoading(true);
+      clearResult();
+
+      google.script.run
+        .withSuccessHandler(function(res) { btn.disabled = false; showLoading(false); onResult(res, ym); })
+        .withFailureHandler(function(err) { btn.disabled = false; showLoading(false); showError("GAS エラー: " + err.message); })
+        .getMonthlyClaimList_V3(ym);
+    }
+
+    function onResult(res, ym) {
+      if (!res.ok) { showError(res.message || "取得に失敗しました"); return; }
+
+      var patients = res.patients || [];
+      if (patients.length === 0) {
+        document.getElementById("empty-msg").style.display = "block";
+        return;
+      }
+
+      var hasCheck = patients.some(function(p) { return p.needCheckCount > 0; });
+      if (hasCheck) document.getElementById("note-box").style.display = "block";
+
+      var rh = document.getElementById("result-header");
+      rh.style.display = "block";
+      rh.textContent = ym + " — " + patients.length + " 名";
+
+      var tbody = document.getElementById("result-tbody");
+      var sumVt = 0, sumWp = 0, sumCp = 0;
+
+      patients.forEach(function(p) {
+        sumVt += p.visitTotal; sumWp += p.windowPay; sumCp += p.claimPay;
+        var ncHtml = p.needCheckCount > 0
+          ? '<span class="badge badge-check">要確認 ' + p.needCheckCount + '件</span>'
+          : '<span style="color:#888;font-size:12px">—</span>';
+        var stHtml = p.visitCount === 0
+          ? '<span class="badge badge-novisit">来院なし</span>'
+          : p.isReadyForClaim
+            ? '<span class="badge badge-ready">確認OK</span>'
+            : '<span class="badge badge-check">要確認</span>';
+        var detailUrl = APP_BASE_URL + "?page=monthlyClaimDetail&patientId=" + encodeURIComponent(p.patientId) + "&ym=" + encodeURIComponent(p.ym || ym);
+
+        var tr = document.createElement("tr");
+        tr.innerHTML =
+          "<td>" + esc(p.patientId) + "</td>" +
+          "<td>" + esc(p.patientName) + "</td>" +
+          "<td class='amt'>" + p.visitCount + "</td>" +
+          "<td class='amt'>" + yen(p.visitTotal) + "</td>" +
+          "<td class='amt'>" + yen(p.windowPay) + "</td>" +
+          "<td class='amt'>" + yen(p.claimPay) + "</td>" +
+          "<td style='text-align:center'>" + ncHtml + "</td>" +
+          "<td style='text-align:center'>" + stHtml + "</td>" +
+          "<td><a class='link-detail' href='" + detailUrl + "' target='_top'>詳細 →</a></td>";
+        tbody.appendChild(tr);
+      });
+
+      // 合計行
+      var tfoot = document.getElementById("result-tfoot");
+      tfoot.innerHTML =
+        "<tr><td colspan='3'>合計</td>" +
+        "<td class='amt'>" + yen(sumVt) + "</td>" +
+        "<td class='amt'>" + yen(sumWp) + "</td>" +
+        "<td class='amt'>" + yen(sumCp) + "</td>" +
+        "<td colspan='3'></td></tr>";
+
+      document.getElementById("table-wrap").style.display = "block";
+    }
+
+    function showLoading(on) {
+      document.getElementById("loading").style.display = on ? "block" : "none";
+    }
+    function showError(msg) {
+      var el = document.getElementById("error-box");
+      el.textContent = msg;
+      el.style.display = "block";
+    }
+    function clearResult() {
+      document.getElementById("error-box").style.display = "none";
+      document.getElementById("empty-msg").style.display = "none";
+      document.getElementById("note-box").style.display = "none";
+      document.getElementById("result-header").style.display = "none";
+      document.getElementById("table-wrap").style.display = "none";
+      document.getElementById("result-tbody").innerHTML = "";
+      document.getElementById("result-tfoot").innerHTML = "";
+    }
+  </script>
+</body>
+</html>

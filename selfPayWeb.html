@@ -1,0 +1,507 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>自費明細入力 — JREC-01</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: "Hiragino Sans", "Yu Gothic", sans-serif;
+      background: #f5f6fa;
+      color: #222;
+      padding: 16px;
+      font-size: 14px;
+    }
+
+    /* ヘッダ */
+    .page-header {
+      background: #fff;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      padding: 12px 16px;
+      margin-bottom: 16px;
+    }
+    .page-header h1 {
+      font-size: 17px;
+      font-weight: 700;
+      color: #1a73e8;
+      margin-bottom: 4px;
+    }
+    .visit-label { font-size: 12px; color: #666; }
+    #gymMemberBadge {
+      display: none;
+      background: #e6f4ea;
+      color: #137333;
+      border: 1px solid #34a853;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 2px 8px;
+      margin-top: 6px;
+      display: inline-block;
+    }
+
+    /* ローディング */
+    #loading {
+      text-align: center;
+      padding: 32px 0;
+      color: #888;
+      font-size: 14px;
+    }
+
+    /* 明細テーブル */
+    #main-content { display: none; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: #fff;
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: 0 1px 4px rgba(0,0,0,.1);
+      margin-bottom: 10px;
+    }
+    thead th {
+      background: #e8f0fe;
+      padding: 8px 8px;
+      font-size: 12px;
+      font-weight: 700;
+      text-align: center;
+      border-bottom: 1px solid #c5cae9;
+      color: #333;
+    }
+    tbody td {
+      padding: 6px 6px;
+      border-bottom: 1px solid #eee;
+      vertical-align: middle;
+    }
+    tbody tr:last-child td { border-bottom: none; }
+    td.no-col  { text-align: center; width: 28px; color: #999; font-size: 12px; }
+
+    select.menu-select {
+      width: 100%;
+      padding: 5px 6px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      font-size: 13px;
+      background: #fff;
+    }
+    input[type="number"] {
+      width: 100%;
+      padding: 5px 6px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      font-size: 13px;
+      text-align: right;
+    }
+    .subtotal-cell {
+      text-align: right;
+      font-weight: 700;
+      min-width: 64px;
+      padding-right: 8px;
+      background: #f9f9f9;
+      font-size: 13px;
+    }
+    .delete-btn {
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: #c00;
+      font-size: 16px;
+      padding: 4px 6px;
+      line-height: 1;
+    }
+    .delete-btn:hover { color: #900; }
+
+    /* 行追加 / 合計 */
+    #add-row-btn {
+      background: #e8f0fe;
+      border: 1px solid #1a73e8;
+      color: #1a73e8;
+      padding: 8px 16px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 13px;
+      margin-bottom: 12px;
+    }
+    #add-row-btn:hover { background: #d2e3fc; }
+
+    #total-area {
+      text-align: right;
+      font-size: 16px;
+      font-weight: 700;
+      margin-bottom: 14px;
+      color: #222;
+    }
+
+    /* エラー / ステータス */
+    #status-msg {
+      font-size: 13px;
+      color: #c00;
+      margin-bottom: 8px;
+      min-height: 18px;
+    }
+
+    /* フッターボタン */
+    .footer-btns {
+      display: flex;
+      gap: 10px;
+      justify-content: flex-end;
+      margin-top: 4px;
+    }
+    .btn-back {
+      background: #f1f3f4;
+      border: 1px solid #ccc;
+      padding: 10px 18px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 14px;
+      text-decoration: none;
+      color: #333;
+    }
+    .btn-save {
+      background: #1a73e8;
+      color: #fff;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 600;
+    }
+    .btn-save:hover    { background: #1558b0; }
+    .btn-save:disabled { background: #aaa; cursor: not-allowed; }
+
+    /* 成功パネル */
+    #success-panel {
+      display: none;
+      background: #d4edda;
+      border: 1px solid #27ae60;
+      border-radius: 8px;
+      padding: 20px 24px;
+      text-align: center;
+      margin-top: 16px;
+    }
+    #success-panel .check { font-size: 36px; margin-bottom: 8px; }
+    #success-panel p { font-size: 15px; font-weight: 600; color: #155724; margin-bottom: 14px; }
+    .btn-back-link {
+      display: inline-block;
+      background: #fff;
+      border: 1px solid #27ae60;
+      color: #155724;
+      padding: 8px 20px;
+      border-radius: 6px;
+      text-decoration: none;
+      font-size: 14px;
+      cursor: pointer;
+    }
+    .btn-back-link:hover { background: #f0faf3; }
+
+    /* エラーパネル（visitKey 不正時） */
+    #error-panel {
+      display: none;
+      background: #fff3cd;
+      border: 1px solid #ffc107;
+      border-radius: 8px;
+      padding: 20px;
+      color: #856404;
+      font-size: 14px;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="page-header">
+    <h1>自費明細入力</h1>
+    <div class="visit-label" id="visitKeyLabel">読み込み中...</div>
+    <span id="gymMemberBadge">&#127947; ジム会員料金 適用中</span>
+  </div>
+
+  <div id="error-panel"></div>
+  <div id="loading">価格マスタを読み込んでいます...</div>
+
+  <div id="main-content">
+    <table id="detail-table">
+      <thead>
+        <tr>
+          <th class="no-col">#</th>
+          <th style="width:44%;">メニュー名</th>
+          <th style="width:16%;">単価</th>
+          <th style="width:12%;">数量</th>
+          <th style="width:16%;">小計</th>
+          <th style="width:34px;"></th>
+        </tr>
+      </thead>
+      <tbody id="detail-tbody"></tbody>
+    </table>
+
+    <button id="add-row-btn" onclick="addRow()">+ 行追加</button>
+    <div id="total-area">合計: ¥ <span id="total-value">0</span></div>
+    <div id="status-msg"></div>
+
+    <div class="footer-btns">
+      <a class="btn-back" href="<?= appBaseUrl ?>">← 戻る</a>
+      <button class="btn-save" id="save-btn" onclick="doSave()">保存する</button>
+    </div>
+  </div>
+
+  <div id="success-panel">
+    <div class="check">✓</div>
+    <p id="success-msg">自費明細を保存しました</p>
+    <a class="btn-back-link" href="<?= appBaseUrl ?>">← 患者検索に戻る</a>
+  </div>
+
+  <script>
+    // GAS テンプレートで visitKey を埋め込む（サーバー側でサニタイズ済み）
+    var VISIT_KEY   = "<?= visitKey ?>";
+    var menuMaster  = [];
+    var visitKeyInfo = null;
+    var _saving     = false;
+
+    // ===== 初期化 =====
+    if (!VISIT_KEY) {
+      showErrorPanel("visitKey が指定されていません。患者検索ページから再操作してください。");
+    } else {
+      google.script.run
+        .withSuccessHandler(onContextLoaded)
+        .withFailureHandler(function(e) {
+          showErrorPanel("初期化エラー: " + e.message);
+        })
+        .getSelfPayDataByVisitKey_V3(VISIT_KEY);
+    }
+
+    function onContextLoaded(info) {
+      if (info && info.error) {
+        showErrorPanel("初期化エラー: " + info.error);
+        return;
+      }
+      visitKeyInfo = info;
+      document.getElementById("visitKeyLabel").textContent =
+        "来院キー: " + (info.visitKey || "---") + "  /  来院日: " + (info.treatDate || "");
+      if (info.isGymMember) {
+        document.getElementById("gymMemberBadge").style.display = "inline-block";
+      }
+      loadMenuMaster();
+    }
+
+    function loadMenuMaster() {
+      google.script.run
+        .withSuccessHandler(function(master) {
+          menuMaster = master || [];
+          document.getElementById("loading").style.display = "none";
+          document.getElementById("main-content").style.display = "block";
+
+          if (visitKeyInfo && visitKeyInfo.existItems && visitKeyInfo.existItems.length > 0) {
+            visitKeyInfo.existItems.forEach(function(item) {
+              addRow(item.menuId, item.menuName, item.unitPrice, item.qty);
+            });
+          } else {
+            addRow();
+          }
+          updateTotal();
+        })
+        .withFailureHandler(function(e) {
+          showErrorPanel("メニューマスタ読み込みエラー: " + e.message);
+        })
+        .getSelfPayMenuMaster_V3();
+    }
+
+    // ===== 行操作 =====
+    function addRow(menuId, menuName, unitPrice, qty) {
+      var tbody = document.getElementById("detail-tbody");
+      var rowNo = tbody.rows.length + 1;
+      var tr    = document.createElement("tr");
+
+      // # 列
+      var tdNo = document.createElement("td");
+      tdNo.className   = "no-col";
+      tdNo.textContent = rowNo;
+      tr.appendChild(tdNo);
+
+      // メニュー選択
+      var tdMenu = document.createElement("td");
+      var sel    = document.createElement("select");
+      sel.className = "menu-select";
+      sel.innerHTML = "<option value=''>-- 選択 --</option>";
+      menuMaster.forEach(function(m) {
+        var opt  = document.createElement("option");
+        opt.value = m.menuId;
+        var isGym = visitKeyInfo && visitKeyInfo.isGymMember;
+        var price = (isGym && m.memberPrice > 0) ? m.memberPrice : m.unitPrice;
+        opt.textContent   = m.menuName + " (¥" + price.toLocaleString() + ")";
+        opt.dataset.price = price;
+        opt.dataset.name  = m.menuName;
+        if (m.menuId === menuId) opt.selected = true;
+        sel.appendChild(opt);
+      });
+      // マスタにないメニュー（既存データ）
+      if (menuName && !menuMaster.some(function(m) { return m.menuId === menuId; })) {
+        var opt2 = document.createElement("option");
+        opt2.value = menuId || "";
+        opt2.textContent   = menuName + " (手入力)";
+        opt2.dataset.price = unitPrice || 0;
+        opt2.dataset.name  = menuName;
+        opt2.selected = true;
+        sel.appendChild(opt2);
+      }
+      sel.onchange = function() {
+        var chosen = sel.options[sel.selectedIndex];
+        if (chosen && chosen.dataset.price) {
+          tr.querySelector(".price-input").value = chosen.dataset.price;
+        }
+        updateSubtotal(tr);
+        updateTotal();
+      };
+      tdMenu.appendChild(sel);
+      tr.appendChild(tdMenu);
+
+      // 単価
+      var tdPrice    = document.createElement("td");
+      var priceInput = document.createElement("input");
+      priceInput.type      = "number";
+      priceInput.className = "price-input";
+      priceInput.min       = "0";
+      priceInput.value     = unitPrice !== undefined
+        ? unitPrice
+        : (sel.options[sel.selectedIndex] ? (sel.options[sel.selectedIndex].dataset.price || 0) : 0);
+      priceInput.oninput = function() { updateSubtotal(tr); updateTotal(); };
+      tdPrice.appendChild(priceInput);
+      tr.appendChild(tdPrice);
+
+      // 数量
+      var tdQty    = document.createElement("td");
+      var qtyInput = document.createElement("input");
+      qtyInput.type      = "number";
+      qtyInput.className = "qty-input";
+      qtyInput.min       = "1";
+      qtyInput.value     = qty !== undefined ? qty : 1;
+      qtyInput.oninput = function() { updateSubtotal(tr); updateTotal(); };
+      tdQty.appendChild(qtyInput);
+      tr.appendChild(tdQty);
+
+      // 小計
+      var tdSub = document.createElement("td");
+      tdSub.className = "subtotal-cell";
+      tdSub.innerHTML = "¥ <span class='subtotal-val'>0</span>";
+      tr.appendChild(tdSub);
+
+      // 削除
+      var tdDel  = document.createElement("td");
+      var delBtn = document.createElement("button");
+      delBtn.className   = "delete-btn";
+      delBtn.textContent = "✕";
+      delBtn.title       = "削除";
+      delBtn.onclick = function() {
+        tbody.removeChild(tr);
+        renumberRows();
+        updateTotal();
+      };
+      tdDel.appendChild(delBtn);
+      tr.appendChild(tdDel);
+
+      tbody.appendChild(tr);
+      updateSubtotal(tr);
+    }
+
+    function updateSubtotal(tr) {
+      var price = parseFloat(tr.querySelector(".price-input").value) || 0;
+      var qty   = parseFloat(tr.querySelector(".qty-input").value)   || 1;
+      tr.querySelector(".subtotal-val").textContent = (price * qty).toLocaleString();
+    }
+
+    function updateTotal() {
+      var total = 0;
+      document.querySelectorAll("#detail-tbody tr").forEach(function(tr) {
+        var price = parseFloat(tr.querySelector(".price-input").value) || 0;
+        var qty   = parseFloat(tr.querySelector(".qty-input").value)   || 1;
+        total += price * qty;
+      });
+      document.getElementById("total-value").textContent = total.toLocaleString();
+    }
+
+    function renumberRows() {
+      document.querySelectorAll("#detail-tbody tr").forEach(function(tr, idx) {
+        tr.querySelector(".no-col").textContent = idx + 1;
+      });
+    }
+
+    // ===== 保存 =====
+    function doSave() {
+      if (_saving) return;
+      var saveBtn   = document.getElementById("save-btn");
+      var statusMsg = document.getElementById("status-msg");
+      statusMsg.textContent = "";
+
+      var rows  = document.querySelectorAll("#detail-tbody tr");
+      var items = [];
+      var hasError = false;
+      rows.forEach(function(tr) {
+        var sel      = tr.querySelector(".menu-select");
+        var price    = parseFloat(tr.querySelector(".price-input").value) || 0;
+        var qty      = parseFloat(tr.querySelector(".qty-input").value)   || 1;
+        var chosen   = sel.options[sel.selectedIndex];
+        var menuId   = sel.value || "";
+        var menuName = (chosen && chosen.dataset.name) ? chosen.dataset.name : sel.value;
+        if (!menuName || menuName === "-- 選択 --") { hasError = true; return; }
+        items.push({ menuId: menuId, menuName: menuName, unitPrice: price, qty: qty });
+      });
+
+      if (hasError) { statusMsg.textContent = "メニューを選択してください。"; return; }
+
+      if (items.length === 0) {
+        if (!window.confirm("自費明細を全件削除します。D7/F7 がクリアされ H8 が「未入力」に戻ります。よろしいですか？")) return;
+      }
+
+      _saving = true;
+      saveBtn.disabled    = true;
+      saveBtn.textContent = "保存中...";
+
+      var vk      = visitKeyInfo ? visitKeyInfo.visitKey : VISIT_KEY;
+      var context = visitKeyInfo ? {
+        treatDate:       visitKeyInfo.treatDate       || "",
+        patientId:       visitKeyInfo.patientId       || "",
+        accountingType:  visitKeyInfo.accountingType  || "",
+        chronicFlag:     visitKeyInfo.chronicFlag      || false,
+        nextReservation: visitKeyInfo.nextReservation  || false,
+      } : {};
+
+      google.script.run
+        .withSuccessHandler(function(result) {
+          _saving = false;
+          saveBtn.disabled    = false;
+          saveBtn.textContent = "保存する";
+          if (result === "OK") {
+            showSuccess(items.length);
+          } else {
+            statusMsg.textContent = "保存エラー: " + result;
+          }
+        })
+        .withFailureHandler(function(e) {
+          _saving = false;
+          saveBtn.disabled    = false;
+          saveBtn.textContent = "保存する";
+          statusMsg.textContent = "エラー: " + e.message;
+        })
+        .saveSelfPayDetailsFromDialog_V3(vk, JSON.stringify(items), JSON.stringify(context));
+    }
+
+    // ===== 成功・エラー表示 =====
+    function showSuccess(count) {
+      document.getElementById("main-content").style.display = "none";
+      var msg = count > 0
+        ? count + " 件の自費明細を保存しました"
+        : "自費明細を全件削除しました";
+      document.getElementById("success-msg").textContent = msg;
+      document.getElementById("success-panel").style.display = "block";
+    }
+
+    function showErrorPanel(msg) {
+      document.getElementById("loading").style.display   = "none";
+      document.getElementById("main-content").style.display = "none";
+      var ep = document.getElementById("error-panel");
+      ep.textContent  = msg;
+      ep.style.display = "block";
+    }
+  </script>
+</body>
+</html>

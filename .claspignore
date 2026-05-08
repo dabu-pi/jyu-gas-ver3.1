@@ -1,0 +1,12 @@
+.venv/**
+__pycache__/**
+output/**
+*.ndjson
+*.pdf
+*.py
+docs/**
+PROJECT_STATUS.md
+TESTCASES.md
+SPEC.md
+PLAN.md
+ROADMAP.md
