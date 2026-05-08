@@ -1,6 +1,6 @@
 # JREC-01 柔整保険申請書 Ver3.1 — プロジェクトステータス
 
-最終更新: 2026-05-08 (WEB-5: 本番フロー一周確認 — 全フロー OK / 申請書生成 OK)  
+最終更新: 2026-05-08 (WEB-6: 共通グローバルナビタブ追加 / clasp push 済 / dev確認待ち)  
 担当: dabu-pi  
 ブランチ: `feature/auto-dev-phase3-loop`
 
@@ -47,6 +47,12 @@ npx tsx tools/live-check-runner/scripts/check-exec-home.ts
 ```
 
 ### 次のアクション
+
+**→ WEB-6 実装完了（2026-05-08）** — 共通グローバルナビタブ追加  
+  - 7ページに `.web-nav` タブナビを追加（全リンク `target="_top"` 付き）
+  - 対象: web-home / patientSearch / web-patient-detail / web-visit-new / web-monthly-claims / web-monthly-claim-detail / selfPayWeb  
+  - 旧ホームリンクを削除（patientSearch・web-monthly-claims）  
+  - clasp push 済 / **dev 目視確認待ち** / 本番 deploy 未実施
 
 **→ WEB-5 本番フロー一周確認完了（2026-05-08）** ★  
   - 本番 @12 全フロー確認済み（自動スクリプト）  
@@ -193,6 +199,7 @@ APPGEN_SECRET を Web/JS に出さないこと。既存B案ロジックを壊さ
 | WEB-4C | Web月次集計とB案申請書の金額整合（Step1後KPI上書き） | ✅ 完了（clasp push 済 / 2026-05-08） |
 | WEB-4D | tfoot合計行更新バグ修正（cells.length >= 6 → >= 4） | ✅ 完了（clasp push 済 / 2026-05-08） |
 | **本番 deploy** | WEB-4A〜4D 本番反映 @12 | ✅ **2026-05-08 完了** |
+| WEB-6 | 共通グローバルナビタブ追加（7ページ） | 🔄 clasp push 済 / dev確認待ち（2026-05-08）|
 
 ---
 

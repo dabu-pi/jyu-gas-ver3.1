@@ -101,9 +101,19 @@
     .badge-phase2  { background: #fff3cd; color: #856404; }
     .badge-phase3  { background: #e2e3e5; color: #495057; }
     .badge-future  { background: #e2e3e5; color: #495057; }
+    .web-nav{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px;padding:8px 10px;background:#f8fafc;border:1px solid #e5e7eb;border-radius:8px;font-size:13px}
+    .web-nav a{display:inline-block;padding:6px 12px;border-radius:20px;text-decoration:none;font-weight:600;color:#334155;background:#fff;border:1px solid #cbd5e1;white-space:nowrap}
+    .web-nav a:hover{background:#f1f5f9}
+    .web-nav a.active{color:#fff;background:#2563eb;border-color:#2563eb}
   </style>
 </head>
 <body>
+  <nav class="web-nav">
+    <a href="<?= appBaseUrl ?>?page=home" target="_top" class="active">🏠 HOME</a>
+    <a href="<?= appBaseUrl ?>?page=search" target="_top">患者検索</a>
+    <a href="<?= appBaseUrl ?>?page=monthlyClaims" target="_top">月次申請</a>
+    <a href="<?= appBaseUrl ?>?page=selfpay" target="_top">自費明細</a>
+  </nav>
   <div class="page-header">
     <h1>JREC-01 柔整保険申請書</h1>
     <p>スプレッドシート運用中 — Web UI WEB-1〜WEB-3 稼働中</p>
