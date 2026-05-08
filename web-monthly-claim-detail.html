@@ -420,17 +420,29 @@
             document.getElementById("kpi-vt").textContent = yen(res.total);
             document.getElementById("kpi-wp").textContent = yen(res.copay);
             document.getElementById("kpi-cp").textContent = yen(res.claim);
-            // tfoot合計行も更新
+            // tfoot合計行を転記データ金額で上書き
+            // tfoot構造: cells[0]=合計(colspan=3), [1]=来院合計, [2]=窓口, [3]=請求, [4]=空(colspan=2)
             var tf = document.getElementById("visit-tfoot");
             if (tf && tf.rows.length > 0) {
               var cells = tf.rows[0].cells;
-              if (cells.length >= 6) {
+              if (cells.length >= 4) {
                 cells[1].textContent = yen(res.total);
                 cells[2].textContent = yen(res.copay);
                 cells[3].textContent = yen(res.claim);
               }
             }
-            // 集計欄に「申請額（転記データより）」ラベルを追加
+            // テーブル下部に「申請確定額」注記を追加
+            if (!document.getElementById("transfer-table-note")) {
+              var tableWrap = document.querySelector(".table-wrap");
+              if (tableWrap) {
+                var tnote = document.createElement("p");
+                tnote.id = "transfer-table-note";
+                tnote.style.cssText = "font-size:11px;color:#155724;margin-top:6px;padding:0 4px";
+                tnote.textContent = "※ 合計行は申請書転記データの確定額に更新済み。日別明細は来院時の算定記録値です。";
+                tableWrap.after(tnote);
+              }
+            }
+            // KPIカードに「申請額（転記データより）」ラベルを追加
             var kpiCard = document.querySelector(".summary-card");
             if (kpiCard && !document.getElementById("transfer-kpi-note")) {
               var note = document.createElement("p");
