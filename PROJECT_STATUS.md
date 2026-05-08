@@ -1,6 +1,6 @@
 # JREC-01 柔整保険申請書 Ver3.1 — プロジェクトステータス
 
-最終更新: 2026-05-08 (WEB-6: 共通グローバルナビタブ追加 / clasp push 済 / dev確認待ち)  
+最終更新: 2026-05-08 (WEB-6: 共通グローバルナビタブ — LiveCheck 9 PASS / dev確認済み / 本番 deploy 判断待ち)  
 担当: dabu-pi  
 ブランチ: `feature/auto-dev-phase3-loop`
 
@@ -199,7 +199,7 @@ APPGEN_SECRET を Web/JS に出さないこと。既存B案ロジックを壊さ
 | WEB-4C | Web月次集計とB案申請書の金額整合（Step1後KPI上書き） | ✅ 完了（clasp push 済 / 2026-05-08） |
 | WEB-4D | tfoot合計行更新バグ修正（cells.length >= 6 → >= 4） | ✅ 完了（clasp push 済 / 2026-05-08） |
 | **本番 deploy** | WEB-4A〜4D 本番反映 @12 | ✅ **2026-05-08 完了** |
-| WEB-6 | 共通グローバルナビタブ追加（7ページ） | 🔄 clasp push 済 / dev確認待ち（2026-05-08）|
+| WEB-6 | 共通グローバルナビタブ追加（7ページ） | 🔄 LiveCheck 9 PASS / dev確認済み / 本番 deploy 判断待ち（2026-05-08）|
 
 ---
 
