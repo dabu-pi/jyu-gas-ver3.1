@@ -1,6 +1,6 @@
 # JREC-01 柔整保険申請書 Ver3.1 — プロジェクトステータス
 
-最終更新: 2026-05-08 (WEB-4D LiveCheck 全 PASS 確認済み — 本番 deploy 判断待ち)  
+最終更新: 2026-05-08 (WEB-4A〜4D 本番 deploy 完了 @12)  
 担当: dabu-pi  
 ブランチ: `feature/auto-dev-phase3-loop`
 
@@ -48,12 +48,15 @@ npx tsx tools/live-check-runner/scripts/check-exec-home.ts
 
 ### 次のアクション
 
-**→ WEB-4D 最終確認完了（2026-05-08）** — tfoot合計行更新バグ修正・LiveCheck全PASS  
-  - 原因: `cells.length >= 6` チェックが誤り（実際は5）→ tfoot が更新されず  
-  - 修正: `>= 4` に変更 + テーブル下部に「合計行は確定額」注記を追加  
-  - 修正後: Step1実行後にKPI・tfoot・注記がすべて転記データ金額（¥4,363/¥1,310/¥3,053）で統一  
-  - LiveCheck W4D-1〜5 **5 PASS** / W4C-1〜5 **5 PASS** / W4A-1〜5 **5 PASS** / web3 **8 PASS**  
-  - clasp push 済 / **本番 deploy 判断待ち**
+**→ WEB-4A〜4D 本番 deploy 完了（2026-05-08）** ★  
+  - deployment: @12 / deploymentId: `AKfycbxODNWJNcCJVQnDXHzzWck237hnUIIXR_Ilt8SS5P5zodfF2dnmKeqso8BL8hcinVEBrQ`  
+  - 本番 `/exec` 確認済み:  
+    - `?page=monthlyClaims`: ✅ 表示  
+    - `?page=monthlyClaimDetail`: ✅ 表示  
+    - Step1後 来院合計 ¥4,363 / 窓口 ¥1,310 / 請求 ¥3,053 ✅  
+    - tfoot・KPI・注記すべて更新 ✅  
+    - B案Excel生成ボタン表示 ✅  
+    - APPGEN_SECRET 露出なし ✅
 
 **→ WEB-4C 修正完了（2026-05-08）** — Web月次集計とB案申請書の金額整合  
   - 原因: 来院ヘッダの per-visit 候補金額合算 vs `V3TR_buildTransferDataForMonth_` 月合計再計算の丸め差（5円）  
@@ -181,6 +184,7 @@ APPGEN_SECRET を Web/JS に出さないこと。既存B案ロジックを壊さ
 | WEB-4B | 月次申請集計0円バグ修正（buildHeaderColMap_ off-by-one） | ✅ 完了（clasp push 済 / 2026-05-08） |
 | WEB-4C | Web月次集計とB案申請書の金額整合（Step1後KPI上書き） | ✅ 完了（clasp push 済 / 2026-05-08） |
 | WEB-4D | tfoot合計行更新バグ修正（cells.length >= 6 → >= 4） | ✅ 完了（clasp push 済 / 2026-05-08） |
+| **本番 deploy** | WEB-4A〜4D 本番反映 @12 | ✅ **2026-05-08 完了** |
 
 ---
 
