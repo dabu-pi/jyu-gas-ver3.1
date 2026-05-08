@@ -48,11 +48,14 @@ npx tsx tools/live-check-runner/scripts/check-exec-home.ts
 
 ### 次のアクション
 
-**→ WEB-4A 実装完了（2026-05-08）** — Web UI から B案 Cloud Run Excel 申請書生成入口を追加  
+**→ WEB-4A 実機確認完了（2026-05-08）** — Web UI から B案 Cloud Run Excel 申請書生成入口を確認  
   - `generateClaimApplicationBFromWeb_V3(patientId, ym)` 追加（Ver3_transferData.js）
   - `web-monthly-claim-detail.html` に Step 3「申請書Excelを生成」ボタン追加
-  - LiveCheck `web4_application_b.spec.ts` 追加（W4A-1〜5 / auth更新後 PASS 見込み）
-  - clasp push 済 / 本番 deploy 未実施
+  - LiveCheck W4A-1〜5 全 PASS（auth更新後）
+  - 実生成確認: `申請書_hirayamaka_2026-04_102943.xlsx` 生成・Drive保存・ログ記録 ✅
+  - 回帰: smoke 28 PASS / web3 8 PASS / web34 9 PASS / 1 SKIP（設計通り）
+  - clasp push 済 / **本番 deploy 未実施**
+  - 残人間確認: 印刷プレビュー1ページ・転帰欄丸囲み・罫線位置（Drive URL はログシートで確認）
 
 **→ WEB-3.4 実装完了・LiveCheck 9 PASS / 1 SKIP（2026-05-07）**  
 
