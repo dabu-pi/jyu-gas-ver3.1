@@ -1,6 +1,6 @@
 # JREC-01 柔整保険申請書 Ver3.1 — プロジェクトステータス
 
-最終更新: 2026-05-08 (WEB-4B: 月次申請集計0円バグ修正 — buildHeaderColMap_ off-by-one)  
+最終更新: 2026-05-08 (WEB-4C: Web月次集計とB案申請書の金額整合 — Step1後KPI上書き)  
 担当: dabu-pi  
 ブランチ: `feature/auto-dev-phase3-loop`
 
@@ -8,7 +8,7 @@
 
 ## 現在の状態
 
-**稼働中 + WEB-1〜WEB-4B 実装完了 + デフォルト URL = page=home**
+**稼働中 + WEB-1〜WEB-4C 実装完了 + デフォルト URL = page=home**
 
 スプレッドシート運用は継続中。  
 Web UI から来院記録の登録・候補金額算定まで実装済み（needCheck=TRUE / 要確認）。  
@@ -47,6 +47,12 @@ npx tsx tools/live-check-runner/scripts/check-exec-home.ts
 ```
 
 ### 次のアクション
+
+**→ WEB-4C 修正完了（2026-05-08）** — Web月次集計とB案申請書の金額整合  
+  - 原因: 来院ヘッダの per-visit 候補金額合算 vs `V3TR_buildTransferDataForMonth_` 月合計再計算の丸め差（5円）  
+  - 修正: Step1成功後のハンドラで KPI を転記データ金額で上書き + 注記表示  
+  - 修正後: Step1後 KPI ¥4,363 / ¥1,310 / ¥3,053 = B案 Excel と一致  
+  - LiveCheck W4C-1〜5 全 PASS / B案ルート変更なし / clasp push 済
 
 **→ WEB-4B 修正完了（2026-05-08）** — 月次申請集計0円バグ修正  
   - 原因: `getMonthlyClaimList_V3` / `getMonthlyClaimDetail_V3` で `buildHeaderColMap_`（1始まり）を配列インデックス（0始まり）として使用 → 列ズレ → 全行スキップ → 集計0  
@@ -166,6 +172,7 @@ APPGEN_SECRET を Web/JS に出さないこと。既存B案ロジックを壊さ
 | WEB-3.4 | 申請書 PDF 生成（A案：テンプレ書込 + Drive PDF） | ✅ 完了（LiveCheck 9 PASS / 1 SKIP / 2026-05-07） |
 | WEB-4A | Web UI から B案 Cloud Run Excel 申請書生成入口 | ✅ 完了（clasp push 済 / 2026-05-08） |
 | WEB-4B | 月次申請集計0円バグ修正（buildHeaderColMap_ off-by-one） | ✅ 完了（clasp push 済 / 2026-05-08） |
+| WEB-4C | Web月次集計とB案申請書の金額整合（Step1後KPI上書き） | ✅ 完了（clasp push 済 / 2026-05-08） |
 
 ---
 

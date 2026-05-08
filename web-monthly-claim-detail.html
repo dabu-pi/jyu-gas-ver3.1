@@ -416,6 +416,29 @@
               "  当月合計: ¥" + Number(res.total || 0).toLocaleString() +
               " / 窓口: ¥" + Number(res.copay || 0).toLocaleString() +
               " / 請求: ¥" + Number(res.claim || 0).toLocaleString();
+            // KPI 集計欄を転記データ（申請額）で上書き（来院ヘッダ記録値との差分を解消）
+            document.getElementById("kpi-vt").textContent = yen(res.total);
+            document.getElementById("kpi-wp").textContent = yen(res.copay);
+            document.getElementById("kpi-cp").textContent = yen(res.claim);
+            // tfoot合計行も更新
+            var tf = document.getElementById("visit-tfoot");
+            if (tf && tf.rows.length > 0) {
+              var cells = tf.rows[0].cells;
+              if (cells.length >= 6) {
+                cells[1].textContent = yen(res.total);
+                cells[2].textContent = yen(res.copay);
+                cells[3].textContent = yen(res.claim);
+              }
+            }
+            // 集計欄に「申請額（転記データより）」ラベルを追加
+            var kpiCard = document.querySelector(".summary-card");
+            if (kpiCard && !document.getElementById("transfer-kpi-note")) {
+              var note = document.createElement("p");
+              note.id = "transfer-kpi-note";
+              note.style.cssText = "font-size:11px;color:#155724;margin-top:8px;text-align:center";
+              note.textContent = "※ 上記金額は申請書転記データより更新済み（申請額）";
+              kpiCard.appendChild(note);
+            }
           } else {
             el.className = "err";
             el.textContent = "エラー: " + (res.message || "不明なエラー");
