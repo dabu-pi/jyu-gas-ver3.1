@@ -1,8 +1,42 @@
 # JREC-01 柔整保険申請書 Ver3.1 — プロジェクトステータス
 
-最終更新: 2026-05-08 (WEB-6: 共通グローバルナビタブ — 本番 deploy @13 完了)  
+最終更新: 2026-05-14 (Git dirty 根本原因解消・6 中核ファイル復元)  
 担当: dabu-pi  
 ブランチ: `feature/auto-dev-phase3-loop`
+
+---
+
+## 2026-05-14: Git dirty 根本原因解消（緊急対応）
+
+### 発生事象
+
+`gas-projects/jyu-gas-ver3.1` の以下 6 ファイルが HEAD には tracked だが disk から欠損していた:
+
+- `SPEC.md`（20,921 bytes）
+- `Ver3_amounts.js`（54,197 bytes）
+- `Ver3_core.js`（300,004 bytes）
+- `Ver3_patientPicker.js`（6,906 bytes）
+- `Ver3_transferData.js`（129,354 bytes）
+- `appsscript.json`（244 bytes）
+
+### 危険度
+
+**HIGH** — この状態のまま `clasp push` を実行すると、GAS @13 production code を削除する恐れがあった。
+
+### 対応
+
+1. `git checkout -- <6 files>` で HEAD から復元
+2. `git update-index --refresh` + `git status` 空・`git ls-files -d` 空を確認
+3. `docs/JYU_GAS_SOURCE_OF_TRUTH_2026-05-14.md` を追加して再発防止ルールを明文化
+
+### 再発防止
+
+- `clasp push` 前に必ず `git ls-files -d` を確認（missing tracked があれば停止）
+- ファイル削除は必ず `git rm` + commit まで完結
+- workspace 共通 `tools/git-health-check.ps1` を sync 前後で実行
+
+詳細: [`docs/JYU_GAS_SOURCE_OF_TRUTH_2026-05-14.md`](./docs/JYU_GAS_SOURCE_OF_TRUTH_2026-05-14.md)  
+workspace root cause: `../../docs/GIT_DIRTY_ROOT_CAUSE_2026-05-14.md`
 
 ---
 
