@@ -105,7 +105,9 @@
     .web-nav a{display:inline-block;padding:6px 12px;border-radius:20px;text-decoration:none;font-weight:600;color:#334155;background:#fff;border:1px solid #cbd5e1;white-space:nowrap}
     .web-nav a:hover{background:#f1f5f9}
     .web-nav a.active{color:#fff;background:#2563eb;border-color:#2563eb}
-    /* Portal-18-D: 平山ポータルへ戻る薄帯 */
+    /* Portal-18-D: 平山ビジネスポータルへ戻る薄帯
+       Portal Link Audit AUDIT-003 (2026-05-28): target=_top -> target=_blank に変更
+       (外部システム遷移は新規タブ・JYU-GAS タブが残る) + rel=noopener noreferrer 強化 + 文言統一 */
     .portal-return-bar { background:#f0f7ff; border-bottom:1px solid #d0e3ff; padding:6px 16px; text-align:right; font-size:12px; margin:-16px -16px 16px; }
     .portal-return-link { color:#1565c0; text-decoration:none; font-weight:500; }
     .portal-return-link:hover { text-decoration:underline; }
@@ -114,7 +116,7 @@
 <body>
   <div class="portal-return-bar">
     <a href="https://script.google.com/macros/s/AKfycbw20tWvhR5nnRzCiUAMybtfrebRg-BK-EgDamvZYt-clSwf4TK9FGTKNZRmsO3wj7QSiQ/exec"
-       target="_top" rel="noopener" class="portal-return-link">← 平山ポータルへ戻る</a>
+       target="_blank" rel="noopener noreferrer" class="portal-return-link">← 平山ビジネスポータルへ戻る</a>
   </div>
   <nav class="web-nav">
     <a href="<?= appBaseUrl ?>?page=home" target="_top" class="active">🏠 HOME</a>

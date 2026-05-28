@@ -1,8 +1,80 @@
 # JREC-01 柔整保険申請書 Ver3.1 — プロジェクトステータス
 
-最終更新: 2026-05-14 (Git dirty 根本原因解消・6 中核ファイル復元)  
-担当: dabu-pi  
-ブランチ: `feature/auto-dev-phase3-loop`
+最終更新: 2026-05-28（**TASK-PORTAL-LINK-AUDIT-003 staff 7 page 戻りリンク追加 + KPI endpoint rollback CLOSED @17/@15**）
+担当: dabu-pi
+ブランチ: `main`
+
+---
+
+## ✅ 2026-05-28 TASK-PORTAL-LINK-AUDIT-003: 全 staff page に「平山ビジネスポータルへ戻る」追加 + KPI endpoint rollback
+
+状態: **CLOSED** — staff entry @17 / KPI @15（rollback で復旧）
+
+### 実装内容（staff 7 page）
+
+JYU-GAS の全 staff 業務画面に Business Portal 戻りリンク（`target="_blank" rel="noopener noreferrer"`）を追加。
+
+| ファイル | 変更内容 |
+|---|---|
+| `web-home.html` | Portal-18-D 既存ブロックを `target=_top` → **`target=_blank`** に更新 / rel 強化 / 文言「平山ビジネスポータル」統一 |
+| `patientSearch.html` | nav 直前に inline-styled 戻りリンク追加 |
+| `selfPayWeb.html` | 同上 |
+| `web-monthly-claims.html` | 同上 |
+| `web-monthly-claim-detail.html` | 同上 |
+| `web-patient-detail.html` | 同上 |
+| `web-visit-new.html` | 同上 |
+
+共通 include 機構を JYU-GAS は使っていないため、各 page に individual に inline-styled bar を追加（CSS 重複は inline で回避）。
+
+未関与（staff routing 外）: `web-b2-results.html` / `web-find-months.html` / `web-fixture-results.html`（test/diagnostic 出力）/ `selfPayDialog.html`（Sheets サイドバーダイアログ）
+
+### deploy（staff）
+
+- staff entry: `AKfycbxODNWJ...` @16 → **@17**（URL 不変）
+
+### ⚠️ KPI endpoint 副作用 + Rollback（重要）
+
+JREC AUDIT-002 と同じ dual-deploy ルールで KPI deployment（`AKfycbxNMVV...`）にも @15 → @18 deploy したところ、JBIZ fetchInsuranceKpi が `state: "error"` を返すように regression。
+
+**原因**:
+- `?action=insuranceKpiSummary` ハンドラは **このリポに一度も commit されていなかった**（`git log -S"insuranceKpiSummary"` ヒット 0）
+- 過去 @14/@15 deploy 時、GAS Apps Script Editor 上で直接コード追加されていた
+- 現 HEAD の `Ver3_core.js doGet` には `action` parameter 処理が**完全に無く、すべて `page` routing**
+- `clasp push --force` で Editor 上の action handler が **HEAD コードで上書きされ消失**
+
+**rollback**:
+- `clasp deploy --deploymentId AKfycbxNMVV... --versionNumber 15` で **KPI deployment を version 15 に戻し復旧**
+- 復旧後 JBIZ fetchInsuranceKpi: `{"ok":true, "state":"connected", "data":{insurance_visit_count, ...}}` 正常応答
+
+**結果**:
+- staff entry: @17（新 HTML / 戻りリンク強化）
+- KPI: **@15 維持**（旧 code / action handler 健在）
+- 両 deployment 独立して機能
+
+### ⚠️ JYU-GAS dual-deploy ルール（新規・必須）
+
+> **JYU-GAS の KPI deployment（`AKfycbxNMVV...`）には HEAD code を新規 deploy しない。**
+> action handler が GAS Apps Script Editor 上にのみ存在し、HEAD code に commit されていないため、deploy するたびに handler が消滅する。
+> 将来 action handler を properly に HEAD へ commit するまで、KPI deployment は **version 15 に pin** する。
+> staff entry deployment（`AKfycbxODNWJ...`）への deploy は HEAD code で問題なし。
+
+JREC-SF01 の dual-deploy ルール（staff + KPI 両方 deploy）は JYU-GAS には**適用しない**。
+
+### live 検証
+
+| 項目 | 結果 |
+|---|---|
+| 7 staff page 全てに戻りリンク表示 + target=_blank | ✅ |
+| 患者検索 / 月次申請 / 自費明細 / 患者詳細 / 来院記録 / 月次申請詳細 から戻れる | ✅ |
+| KPI endpoint `?action=insuranceKpiSummary` rollback 後 JSON 正常 | ✅（`ok:true / state:connected`）|
+| JBIZ Portal-13 fetchInsuranceKpi connected | ✅ |
+| JBIZ smoke 262/262 PASS | ✅（regression 0）|
+
+### follow-up（別タスク）
+
+- **TASK-PORTAL-13-INSURANCE-KPI-HANDLER-COMMIT**: 現在 Editor 上にのみ存在する `?action=insuranceKpiSummary` handler を `Ver3_core.js` 等の repo 内 .js ファイルに properly に commit する。完了すれば KPI deployment への HEAD code deploy も安全になり、dual-deploy parity が回復する。
+
+詳細: `hirayama-jyusei-strategy/docs/PORTAL_LINK_AUDIT_2026-05-28.md` §11
 
 ---
 
