@@ -8,7 +8,20 @@
 
 ## 🖥️ 2026-06-03 JREC-01 既存UI実務化フェーズ1（自費アプリ参考）
 
-状態: **UI最小修正完了（GitHub反映）/ staff deploy は人手実施待ち** — 制度ロジック・保存・生成処理は不変
+状態: **UI最小修正 + staff deploy 完了（@17→@19・URL不変）** — 制度ロジック・保存・生成処理は不変 / KPI @15 不変
+
+### staff deploy（2026-06-03 実施）
+
+| 項目 | 値 |
+|---|---|
+| staff deploymentId | `AKfycbxODNWJ...`（不変）/ version **@17 → @19** / URL 不変 |
+| KPI deploymentId | `AKfycbxNMVV...` **@15 のまま不変**（live read-only HTTP200 `ok:true` 確認） |
+| push 対象 | web-home.html / web-monthly-claim-detail.html の 2 HTML のみ（全 .js は editor=repo SHA256 一致） |
+| KPI handler フットガン | 非該当（editor に handler は既に無く version15 スナップショットのみが @15 を配信。push/staff-deploy で不変） |
+| 検証 | clasp pull で editor HEAD を temp に非破壊 snapshot し差分確認 / single-writer: clasp 操作プロセスなし・CDP未起動 |
+| rollback | `clasp deploy --deploymentId AKfycbxODNWJ... --versionNumber 17` |
+| 確認URL（人手 Google ログイン） | https://script.google.com/macros/s/AKfycbxODNWJ.../exec?page=home / ...?page=monthlyClaims |
+
 
 方針: 実務が進む自費アプリ **JREC-SF01** の画面構成・导线・実務UX を参考に、保険施術録UI を整える（会計・予約・問診・金額ロジックは流用しない）。
 

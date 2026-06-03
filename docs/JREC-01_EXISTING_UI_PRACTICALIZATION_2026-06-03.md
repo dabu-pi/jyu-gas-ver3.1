@@ -148,17 +148,16 @@
 - 増加: なし（注意表示の追加のみ。新たな書込導線は作っていない）
 - 低減: 生成導線に標準注意を多重化 → 誤生成・確認漏れの抑止
 
-## 6. deploy情報（今回は見送り）
+## 6. deploy情報（2026-06-03 実施済み — staff @19）
 
 ```
-実施:    見送り（staff deployment 未更新。@17 のまま）
-理由:
-  - 別 claude プロセス（PID 7980）稼働中 → workspace CLAUDE.md single-writer ルール
-    「同一 Apps Script project への clasp push/deploy は直列のみ」に抵触回避
-  - clasp push は Editor 上の未commit KPI handler を HEAD で上書きするフットガン
-    （KPI @15 は v15 pin のため live は無影響だが、push 自体は editor を書換える）
-  - deploy 後の検証が auth 失効・MYSELF access で自動実行不可（人手 Google ログイン必須）
-影響:    UI変更は GitHub main に反映済みだが、staff /exec @17 にはまだ反映されていない
+実施:    ★実施済み（2026-06-03）。staff deployment のみ更新。KPI @15 は不変
+deploymentId: AKfycbxODNWJ...（staff・不変）/ version @17 → @19 / URL 不変
+KPI:     AKfycbxNMVV... @15 のまま（live read-only HTTP200 ok:true 確認）
+検証:    clasp pull で editor HEAD を temp に非破壊 snapshot → 全 .js が editor=repo 一致・
+         insuranceKpiSummary handler は editor に既に無し（version15 スナップショットのみ）→ フットガン非該当
+rollback: clasp deploy --deploymentId AKfycbxODNWJ... --versionNumber 17
+影響:    UI変更が staff /exec に反映済み（人手 Google ログインで目視）
 ```
 
 **人が deploy する手順（並行 claude を止め、Google ログイン可能な状態で）:**

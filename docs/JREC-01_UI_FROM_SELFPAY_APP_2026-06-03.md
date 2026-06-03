@@ -140,17 +140,22 @@ visitKey / caseKey / 患者ID / 施術日 / 初検・再検・後療 / 受傷日
 - 増加: なし（注意表示・导线修正のみ。新書込導線なし）。
 - 低減: 行き止まり导线の解消 + 生成導線への本番処理注意多重化。
 
-## 6. deploy情報（今回は見送り）
+## 6. deploy情報（2026-06-03 実施済み — staff @19）
 
 ```
-実施: 見送り（staff @17 未更新）
-理由:
-  - 別 claude プロセス(PID 7980 稼働)→ workspace CLAUDE.md single-writer
-    「同一 Apps Script project への clasp push/deploy は直列のみ」回避
-  - clasp push は Editor 上の未commit KPI handler を上書きするフットガン(@15 は v15 pin で live 無影響)
-  - deploy 後検証が auth 失効・MYSELF access で自動不可（人手 Google ログイン要）
-影響: UI変更は GitHub main に反映済み。staff /exec @17 には未反映（deploy 後に表示される）
-旧URL維持: staff deploymentId を維持して deploy すれば URL 不変（@17→@18）
+実施: ★実施済み（2026-06-03）
+deploymentId: AKfycbxODNWJNcCJVQnDXHzzWck237hnUIIXR_Ilt8SS5P5zodfF2dnmKeqso8BL8hcinVEBrQ（staff・不変）
+version: @17 → @19（URL不変＝deploymentId 維持）
+staff URL: https://script.google.com/macros/s/AKfycbxODNWJ.../exec（旧URL=新URL・変更なし）
+KPI: AKfycbxNMVV... @15 のまま（未変更・live read-only HTTP200 ok:true 確認済）
+
+KPI handler フットガン検証（clasp pull で editor HEAD を temp に非破壊 snapshot）:
+  - editor の Ver3_core.js に insuranceKpiSummary handler は既に無い（前回 AUDIT-003 push で editor は HEAD 同期済）
+  - 全 .js が editor=repo で SHA256 一致。差分は web-home.html / web-monthly-claim-detail.html の 2 HTML のみ
+  - handler は immutable な version 15 スナップショットにのみ存在し @15 が配信 → clasp push でも staff-only deploy でも不変
+  → フットガン非該当・安全に push/deploy 実施
+single-writer: clasp push 時点で node/clasp/playwright プロセスなし・CDP 9222 未起動（別 claude PID 7980 は稼働だが clasp 未操作）
+rollback: clasp deploy --deploymentId AKfycbxODNWJ... --versionNumber 17
 ```
 
 **人が deploy する手順（並行 claude を止め、clasp 認証済みで）:**
