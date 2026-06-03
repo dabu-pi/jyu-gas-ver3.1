@@ -15,9 +15,22 @@
 - read-only 実測: Cloud Run `/health` = `{"status":"ok"}` ✅ / insuranceKpi `@15` GET = `ok:true`（@15 rollback 維持）✅
 - staff prod `/exec` は MYSELF access のためログインリダイレクト（中身は未確認）
 - live-check-runner Playwright 本体は見送り（auth.json 6日前で失効疑い / CDP 9222 未起動 / 別 claude 並行）
-- **未特定: JREC-01 本体スプレッドシートの URL / ID / 表示名**（container-bound のためコード内にSS-IDなし。GAS editor / clasp open で要確認）
 - 正本マップ・制度ロジック棚卸し（医師同意=仕様のみ / 監査ログ=限定）・触ってよい/いけないファイルを記録
-- 次作業: ①本体SS URL/ID 特定 ②保険対応アプリ次フェーズ実装方針確定（または live-check auth 更新 → smoke read-only 検証）
+
+### ★2026-06-03（午後）JREC-01 本体スプレッドシート特定完了
+
+| 項目 | 値 |
+|---|---|
+| name | **【毎日記録】来店管理施術録ver3.1** |
+| ID | `1rXWkfAc_ppOfMV5Dxmb3maX9ORVrZbpSOX2Lz7RouZM` |
+| URL | https://docs.google.com/spreadsheets/d/1rXWkfAc_ppOfMV5Dxmb3maX9ORVrZbpSOX2Lz7RouZM/edit |
+| 特定根拠 | `Ver3_core.js` `auditLegacyMenuIds_V3` のハードコード `JREC_SS_ID` ＋ read-only gviz/title 実測 |
+| 主要シート確認 | 来院ケース/来院ヘッダ/患者マスタ/施術明細/初検情報履歴/設定/自費明細/`_申請書生成ログ` の8シートを gviz `status:ok` で確認 |
+| 注意 | 旧 ID `121BkW7jE...` は「運用ポータル」で JREC 本体ではない（2026-04-18 訂正済み）。混同しないこと |
+
+> 前回「コード内に本体SS-ID 定数なし」と記録したのは誤り。監査関数にハードコードされていた。これにより**唯一の未特定事項が解消**。
+> live-check-runner `projects/jyu-gas-ver31/config.json` の `notes` に本体SS参照を追記済み。
+> 次作業: **保険対応アプリ 次フェーズ実装方針確定**（土台確認は完了）／ または live-check auth 更新 → smoke read-only 検証。
 
 詳細記録: [`docs/JREC-01_現状確認_2026-06-03.md`](./docs/JREC-01_現状確認_2026-06-03.md)
 
