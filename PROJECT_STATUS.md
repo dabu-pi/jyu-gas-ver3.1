@@ -1,8 +1,29 @@
 # JREC-01 柔整保険申請書 Ver3.1 — プロジェクトステータス
 
-最終更新: 2026-06-03（**JREC-01 次フェーズ実装方針 確定（設計フェーズ）**）
+最終更新: 2026-06-03（**JREC-01 既存UI実務化フェーズ1 — 自費アプリ(JREC-SF01)参考 / UI・导线・安全表示の最小修正**）
 担当: dabu-pi
 ブランチ: `main`
+
+---
+
+## 🖥️ 2026-06-03 JREC-01 既存UI実務化フェーズ1（自費アプリ参考）
+
+状態: **UI最小修正完了（GitHub反映）/ staff deploy は人手実施待ち** — 制度ロジック・保存・生成処理は不変
+
+方針: 実務が進む自費アプリ **JREC-SF01** の画面構成・导线・実務UX を参考に、保険施術録UI を整える（会計・予約・問診・金額ロジックは流用しない）。
+
+| 項目 | 内容 |
+|---|---|
+| 正本確認URL（staff @17） | https://script.google.com/macros/s/AKfycbxODNWJNcCJVQnDXHzzWck237hnUIIXR_Ilt8SS5P5zodfF2dnmKeqso8BL8hcinVEBrQ/exec |
+| 変更ファイル | `web-home.html` / `web-monthly-claim-detail.html`（HTML/导线/文言のみ・`.js` 不変） |
+| 今回のUI修正 | ① ホームに「🩺 JREC-01 保険施術録／実務確認中／本体SS名」安全バナー ② ホーム「来院記録」カードの行き止まり导线修正（visitNew 直リンク→患者検索経由）③ 月次申請詳細の生成エリアに「⚠️ 本番処理注意（Drive出力/ログ記録・対象月/患者/保険者/金額確認）」バナー |
+| 本番書込ロジック | 変更なし（保存・申請書生成・施術録生成・テンプレート不変） |
+| 自費ロジック流用 | なし（参考は画面構成・导线・注意表示・PII規律のみ） |
+| deploy | 見送り（別 claude 並行=single-writer / clasp push の KPI handler フットガン / 検証 auth 不可）。手順は docs §6 に明記、人手実施待ち |
+| live-check | Playwright 未実施（auth失効・CDP未起動・並行claude）。HTML コードレビューで代替 |
+| 記録 | [`docs/JREC-01_UI_FROM_SELFPAY_APP_2026-06-03.md`](./docs/JREC-01_UI_FROM_SELFPAY_APP_2026-06-03.md) / [`docs/JREC-01_EXISTING_UI_PRACTICALIZATION_2026-06-03.md`](./docs/JREC-01_EXISTING_UI_PRACTICALIZATION_2026-06-03.md) |
+| 次フェーズ候補 | ①共通シェル(include)化 ②ホームダッシュボード(月次申請要確認件数・当月来院サマリ/PII無) ③保存前確認UI強化 ④Step4(A案PDF停止ルート)ボタン撤去 |
+| Dashboard | 未実施（de 非対話不可）。人手: `de -ProjectId JREC-01 "JREC-01 自費UI参考 保険施術録UI実務化 2026-06-03"` |
 
 ---
 
