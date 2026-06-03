@@ -1,8 +1,31 @@
 # JREC-01 柔整保険申請書 Ver3.1 — プロジェクトステータス
 
-最終更新: 2026-06-03（**JREC-01 実装前 現状確認完了（記録フェーズ）**）
+最終更新: 2026-06-03（**JREC-01 次フェーズ実装方針 確定（設計フェーズ）**）
 担当: dabu-pi
 ブランチ: `main`
+
+---
+
+## 🧭 2026-06-03 JREC-01 次フェーズ設計（推奨フェーズ確定）
+
+状態: **方針確定** — 設計のみ（コード実装・本番書込・GAS push・deploy なし）
+
+| 項目 | 内容 |
+|---|---|
+| 推奨フェーズ | **Phase 1 = E. 監査ログ基盤新設（`_操作ログ` シート / append-only 汎用操作ログ）** |
+| 理由 | 本番書込事故リスク最小（既存シート不変・新シート追記のみ）/ 監査耐性・外販耐性を即時付与 / 既存 `V3TR_writeGenerationLog_` の実証済みパターン踏襲 / 後続 D・F の安全な土台 / live-check で read-only 検証容易 |
+| 対象ファイル | `Ver3_core.js`（`saveVisit_V3` / `saveVisitFromWeb_V3` / 削除経路 / 新設 `writeOperationLog_V3_`） |
+| 対象関数 | `writeOperationLog_V3_`（新設・append-only）+ 3経路フック |
+| 対象SS | 本体SS `1rXWkfAc_...` に新シート `_操作ログ` を追記 |
+| 本番書込リスク | 最小（既存シート無変更・新シートへ append のみ。auto-create + frozen header） |
+| deploy要否 | 実装フェーズで staff deployment へ clasp deploy（KPI @15 は触らない） |
+| 実装順序 | **E（次）→ D 医師同意（返戻リスク直撃・要オーナー決定）→ F 生成安全化 → C KPI handler commit → A/G UI/運用**。B live-check auth 更新は E 検証時に内包 |
+| 次回実装プロンプト | [`docs/JREC-01_NEXT_PHASE_PLAN_2026-06-03.md`](./docs/JREC-01_NEXT_PHASE_PLAN_2026-06-03.md) §4 |
+| Dashboard反映 | 未実施（de 非対話不可）。人が workspace ルートで `de -ProjectId JREC-01 "..."` 実行 |
+
+> 返戻リスク最大は D（医師同意）だが、(1) 同意データ保存先のオーナー決定待ち、(2) 監査ログ無しで制度ロジックを変えると事故時に追跡不能 — のため、追記のみで最小リスクの **E（監査ログ）を先頭**に置き、D を安全な基盤の上に載せる順序とした。
+
+詳細設計: [`docs/JREC-01_NEXT_PHASE_PLAN_2026-06-03.md`](./docs/JREC-01_NEXT_PHASE_PLAN_2026-06-03.md)
 
 ---
 
