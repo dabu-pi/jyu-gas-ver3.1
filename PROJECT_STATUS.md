@@ -1,8 +1,25 @@
 # JREC-01 柔整保険申請書 Ver3.1 — プロジェクトステータス
 
-最終更新: 2026-05-28（**TASK-PORTAL-LINK-AUDIT-003 staff 7 page 戻りリンク追加 + KPI endpoint rollback CLOSED @17/@15**）
+最終更新: 2026-06-03（**JREC-01 実装前 現状確認完了（記録フェーズ）**）
 担当: dabu-pi
 ブランチ: `main`
+
+---
+
+## 📋 2026-06-03 JREC-01 現状確認完了（実装前・記録フェーズ）
+
+状態: **記録完了** — 実装・本番書込・GAS push・Cloud Run deploy なし
+
+- 実装前確認のみ（コード修正なし / 本番書込なし / GAS push なし / Cloud Run deploy なし）
+- repo: `main` / HEAD: `a90c4d6` / working tree clean / ahead-behind 0/0 / missing tracked なし
+- read-only 実測: Cloud Run `/health` = `{"status":"ok"}` ✅ / insuranceKpi `@15` GET = `ok:true`（@15 rollback 維持）✅
+- staff prod `/exec` は MYSELF access のためログインリダイレクト（中身は未確認）
+- live-check-runner Playwright 本体は見送り（auth.json 6日前で失効疑い / CDP 9222 未起動 / 別 claude 並行）
+- **未特定: JREC-01 本体スプレッドシートの URL / ID / 表示名**（container-bound のためコード内にSS-IDなし。GAS editor / clasp open で要確認）
+- 正本マップ・制度ロジック棚卸し（医師同意=仕様のみ / 監査ログ=限定）・触ってよい/いけないファイルを記録
+- 次作業: ①本体SS URL/ID 特定 ②保険対応アプリ次フェーズ実装方針確定（または live-check auth 更新 → smoke read-only 検証）
+
+詳細記録: [`docs/JREC-01_現状確認_2026-06-03.md`](./docs/JREC-01_現状確認_2026-06-03.md)
 
 ---
 
