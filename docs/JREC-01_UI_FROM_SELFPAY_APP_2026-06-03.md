@@ -178,6 +178,13 @@ rollback: `clasp deploy --deploymentId AKfycbxODNWJ... --versionNumber 17`
 人手: deploy 後に下記URLを Google ログインで目視
 ```
 
+## 7.5 ユーザー実機確認結果（2026-06-03・deploy @19 後）
+
+- **ホーム（?page=home）= ✅ OK**: 白画面なし / 「保険施術録・実務確認中・本体SS名」バナー表示 / 来院記録カード→患者検索へ遷移 / ポータル戻り導線あり。
+- **月次申請（?page=monthlyClaims）= △ 一部のみ**: 画面は開き「一覧を取得」押下可。但し当月の保険来院0件で対象者が表示されず、詳細画面・生成エリアの本番処理注意バナー・生成ボタン confirm まで未到達。
+- 月次申請UIの課題（次回対象・UIのみ）: 空状態案内 / 「詳細画面」説明 / 一覧側への本番処理注意 / ボタン文言の語ズレ / 押してよい・いけないボタンの画面内明示。
+- 詳細・次回再開ポイントは [`JREC-01_HANDOFF_2026-06-03.md`](./JREC-01_HANDOFF_2026-06-03.md)。
+
 ## 8. 人が確認するURL（deploy 後）
 ```
 URL: https://script.google.com/macros/s/AKfycbxODNWJ.../exec?page=home

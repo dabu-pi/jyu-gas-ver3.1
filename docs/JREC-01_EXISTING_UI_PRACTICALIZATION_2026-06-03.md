@@ -182,6 +182,12 @@ KPI @15 は一切触らない（`clasp deploy --deploymentId AKfycbxNMVV... --ve
 人手確認: deploy 後に下記URLを Google ログインで開いて目視
 ```
 
+## 7.5 ユーザー実機確認結果（2026-06-03・deploy @19 後）
+
+- ホーム = ✅ OK（バナー表示 / 来院記録カード→患者検索 / ポータル戻り / 白画面なし）。
+- 月次申請 = △ 一部のみ（当月 保険来院0件で対象者が出ず、詳細・生成エリア注意バナー・生成 confirm は未確認）。
+- 次回: 月次申請の空状態・詳細説明・本番処理注意・ボタン文言の整理（UIのみ）。詳細は [`JREC-01_HANDOFF_2026-06-03.md`](./JREC-01_HANDOFF_2026-06-03.md)。
+
 ## 8. 人が確認するURL（deploy 後）
 ```
 URL: https://script.google.com/macros/s/AKfycbxODNWJ.../exec?page=home
