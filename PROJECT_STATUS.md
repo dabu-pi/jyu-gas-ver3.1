@@ -1,8 +1,28 @@
 # JREC-01 柔整保険申請書 Ver3.1 — プロジェクトステータス
 
-最終更新: 2026-06-03（**JREC-01 UI実務化フェーズ1 実機確認結果 記録 + ハンドオフ（セッション終了）**）
+最終更新: 2026-11-12（**JREC AppGen（Cloud Run 申請書生成 B案）の Google Cloud 課金を無効化**）
 担当: dabu-pi
 ブランチ: `main`
+
+---
+
+## ⛔ 2026-11-12 JREC AppGen の Google Cloud 課金を無効化（B案 Cloud Run は停止扱い）
+
+owner が「JREC AppGen は今後使わない」と決め、**`hirayama-jrec-appgen` プロジェクトの課金だけを無効化**することを 2026-11-12 に承認した（追加バックアップは作らない）。
+
+| 項目 | 現在値（2026-11-12 14:29 JST 実測） |
+|---|---|
+| 実行したコマンド | `gcloud billing projects unlink hirayama-jrec-appgen`（1 回・exit 0） |
+| `hirayama-jrec-appgen` の課金 | **無効**（`billingAccountName` 空・`billingEnabled=false`）。プロジェクト自体は `ACTIVE` のまま（削除していない） |
+| 請求先「JREC AppGen 用」（`019265-71FDD7-56798F`） | 開いたまま。残る紐付けは Wildboar の 3 プロジェクトだけ（課金状態は実行前後で変化なし） |
+| 毎月の少額請求の原因 | Artifact Registry に残ったイメージの保管料（2026-10 は 0.55 GiB月で ¥1） |
+| 残る請求 | 2026-11-01 から無効化までの利用分（¥0〜1 見込み）が次の請求で来る可能性がある。🔴 **未確認・完了扱いしない** |
+| 12 月の請求の確認条件 | 2026-12-01 前後に請求先「JREC AppGen 用」で発行される 11 月分の請求書と支払履歴を読み、①JREC AppGen 分が 11/12 までの利用だけ ②金額が ¥0〜1 ③Wildboar 3 プロジェクト分が ¥0 ——を確かめる。2027-01 の請求に JREC AppGen 分が無いことで停止を確定する |
+
+🔴 **Cloud Run `jrec-appgen-server` / `write-application` は稼働中ではない。** 課金を無効にしたため、URL `https://jrec-appgen-server-j6vlxdvqaa-an.a.run.app` は使えない前提で扱う。
+課金なしのプロジェクトでは、イメージ・バケット・Secret などが削除されて戻らないことがある（Google 公式）。
+🔴 **そのため、スプレッドシートメニュー「帳票出力 → 申請書を出力」（`V3TR_menuGenerateApplication_B()`）は失敗する。** GAS コードとスクリプトプロパティ `APPGEN_ENDPOINT` / `APPGEN_SECRET` は変更していない（メニューの扱いは未決定）。
+下の 2026-05 時点の記録は当時の値で、Cloud Run が稼働していた頃のもの。
 
 ---
 
@@ -373,15 +393,15 @@ npx tsx tools/live-check-runner/scripts/check-exec-home.ts
 
 | ルート | 位置づけ |
 |---|---|
-| **B案（Cloud Run → xlsx → Drive）** | ✅ **正ルート・採用確定** |
+| **B案（Cloud Run → xlsx → Drive）** | ✅ **正ルート・採用確定**（⛔ 2026-11-12 に Cloud Run の課金を無効化したため現在は使えない・冒頭の節） |
 | Sheets直PDF（A案） | ❌ 停止・本番化しない |
 | NDJSON+Python ローカル | 補助（B案と同一ロジック / 開発時使用可） |
 
 **B案 = スプレッドシートメニュー「帳票出力 → 申請書を出力」**
 
 - GAS関数: `V3TR_menuGenerateApplication_B()` (`Ver3_transferData.js`)
-- Cloud Run: `https://jrec-appgen-server-j6vlxdvqaa-an.a.run.app`
-- GASスクリプトプロパティ: `APPGEN_ENDPOINT` + `APPGEN_SECRET` 設定済み（運用中）
+- Cloud Run: `https://jrec-appgen-server-j6vlxdvqaa-an.a.run.app` — ⛔ **2026-11-12 に課金を無効化したため使えない**（冒頭の 2026-11-12 の節）
+- GASスクリプトプロパティ: `APPGEN_ENDPOINT` + `APPGEN_SECRET` 設定済み（2026-11-12 時点で値は変更していないが、呼び出し先の Cloud Run は停止扱い）
 
 **Web UI からB案を呼ぶ将来構成（次回以降の候補）:**
 ```
